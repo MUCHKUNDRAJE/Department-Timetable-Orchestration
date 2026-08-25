@@ -1,0 +1,111 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #FFF7FC;
+  --foreground: #1C1B2E;
+
+  --primary: #5755FE;
+  --primary-hover: #4644E6;
+  --primary-light: #EEEDFF;
+
+  --accent: #8B93FF;
+  --accent-light: #F1F3FF;
+
+  --highlight: #FF71CD;
+  --highlight-light: #FFF0FA;
+
+  --surface: #FFFFFF;
+  --surface-card: #FFFFFF;
+  --surface-hover: #FAF6FB;
+  --surface-subtle: #F6EFF5;
+
+  --border: #E8DDE7;
+  --border-strong: #D5C3D3;
+
+  --muted: #797593;
+  --muted-foreground: #565270;
+
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-heading: 'Space Grotesk', 'Plus Jakarta Sans', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, .font-heading {
+  font-family: var(--font-heading);
+  letter-spacing: -0.02em;
+}
+
+.font-mono-tabular {
+  font-family: var(--font-mono);
+  font-feature-settings: 'tnum' on, 'zero' on;
+}
+
+/* Custom Institutional Scrollbar */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: #F7EEF5;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #D9C5D7;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #8B93FF;
+}
+
+/* Grid Cell Patterns */
+.slot-dashed-pattern {
+  background-image: radial-gradient(rgba(139, 147, 255, 0.25) 1px, transparent 0);
+  background-size: 10px 10px;
+}
+
+/* Print Optimization */
+@media print {
+  body {
+    background: #FFFFFF !important;
+    color: #000000 !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .printable-area {
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  @page {
+    size: landscape;
+    margin: 10mm;
+  }
+}
