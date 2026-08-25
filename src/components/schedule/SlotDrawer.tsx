@@ -19,6 +19,13 @@ import { Drawer } from '@/components/ui/Drawer';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   checkAssignmentConflict,
   getFacultyAvailabilityForSlot,
 } from '@/lib/conflict-checker';
@@ -101,9 +108,13 @@ export function SlotDrawer() {
       duration,
       assignments,
       facultyList,
-      assignmentId
+      assignmentId,
+      subjectList,
+      classes,
+      labs,
+      rooms
     );
-  }, [isOpen, day, startSlot, duration, assignments, facultyList, assignmentId]);
+  }, [isOpen, day, startSlot, duration, assignments, facultyList, assignmentId, subjectList, classes, labs, rooms]);
 
   // Filter subjects based on chosen faculty
   const availableSubjects = useMemo(() => {
@@ -113,7 +124,7 @@ export function SlotDrawer() {
     return subjectList.filter((s) => selectedFac.subjectIds.includes(s.id));
   }, [facultyId, facultyList, subjectList]);
 
-  // Auto-switch duration if subject is Lab
+  // Auto-switch duration and auto-fill room when subject changes
   const handleSubjectChange = (newSubjectId: string) => {
     setSubjectId(newSubjectId);
     const subj = subjectList.find((s) => s.id === newSubjectId);
@@ -121,6 +132,10 @@ export function SlotDrawer() {
       setDuration(2);
     } else if (selectedTargetType !== 'lab') {
       setDuration(1);
+      // Auto-fill the first available room for lecture subjects when target is class
+      if (selectedTargetType === 'class' && !roomId && rooms.length > 0) {
+        setRoomId(rooms[0].id);
+      }
     }
   };
 
@@ -227,14 +242,14 @@ export function SlotDrawer() {
             <h3 className="text-base font-bold text-foreground">
               {assignmentId ? 'Edit Scheduled Slot' : 'Assign Time Slot'}
             </h3>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               {currentTargetName} ({selectedTargetType.toUpperCase()})
             </p>
           </div>
         </div>
       }
       subtitle={
-        <div className="flex items-center gap-2 mt-2 font-mono text-xs">
+        <div className="flex items-center gap-2 mt-2 font-mono text-sm">
           <span className="bg-surface px-2 py-0.5 rounded border border-border text-foreground font-bold">
             {day}
           </span>
@@ -244,143 +259,157 @@ export function SlotDrawer() {
         </div>
       }
     >
-      <form onSubmit={handleSubmit} className="space-y-5">
+      <form onSubmit={handleSubmit} className="space-y-6">
         {/* Slot Duration Selector */}
         <div>
-          <label className="block text-xs font-bold text-foreground uppercase tracking-wider mb-2">
+          <label className="block text-sm font-bold text-foreground uppercase tracking-wider mb-2">
             Session Duration
           </label>
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
               onClick={() => setDuration(1)}
-              className={`flex items-center justify-center gap-2 py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
+              className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border text-sm font-bold transition-all ${
                 duration === 1
                   ? 'bg-primary-light border-primary text-primary shadow-xs'
                   : 'bg-surface border-border text-muted hover:border-border-strong'
               }`}
             >
-              <Clock className="w-3.5 h-3.5" />
+              <Clock className="w-4 h-4" />
               1 Hour (Lecture)
             </button>
             <button
               type="button"
               onClick={() => setDuration(2)}
-              className={`flex items-center justify-center gap-2 py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
+              className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border text-sm font-bold transition-all ${
                 duration === 2
                   ? 'bg-highlight-light border-highlight text-highlight shadow-xs'
                   : 'bg-surface border-border text-muted hover:border-border-strong'
               }`}
             >
-              <FlaskConical className="w-3.5 h-3.5" />
+              <FlaskConical className="w-4 h-4" />
               2 Hours (Lab Block)
             </button>
           </div>
         </div>
 
-        {/* Faculty Combobox / Select */}
+        {/* Faculty Select */}
         <div>
-          <div className="flex items-center justify-between mb-1.5">
-            <label className="block text-xs font-bold text-foreground uppercase tracking-wider">
+          <div className="flex items-center justify-between mb-2">
+            <label className="block text-sm font-bold text-foreground uppercase tracking-wider">
               Faculty Member *
             </label>
-            <span className="text-[11px] text-muted-foreground">Pre-filtered for availability</span>
+            <span className="text-xs text-muted-foreground">Pre-filtered for availability</span>
           </div>
 
-          <div className="space-y-1.5">
-            <select
-              aria-label="Select Faculty Member"
-              value={facultyId}
-              onChange={(e) => {
-                setFacultyId(e.target.value);
-                // If current subject is not taught by new faculty, reset subject
-                const newFac = facultyList.find((f) => f.id === e.target.value);
-                if (newFac && subjectId && !newFac.subjectIds.includes(subjectId)) {
-                  setSubjectId('');
-                }
-              }}
-              required
-              className="w-full bg-surface border border-border rounded-xl px-3.5 py-2.5 text-sm font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-accent"
-            >
-              <option value="">-- Choose Faculty --</option>
-              {facultyAvailability.map(({ faculty, isAvailable, allocatedHours, maxHours, conflictReason }) => (
-                <option key={faculty.id} value={faculty.id} disabled={!isAvailable}>
-                  {isAvailable ? '✓ ' : '✕ '} {faculty.name} ({allocatedHours}/{maxHours}h)
-                  {!isAvailable ? ` - ${conflictReason}` : ''}
-                </option>
+          <Select
+            value={facultyId}
+            onValueChange={(val) => {
+              setFacultyId(val);
+              const newFac = facultyList.find((f) => f.id === val);
+              if (newFac && subjectId && !newFac.subjectIds.includes(subjectId)) {
+                setSubjectId('');
+              }
+            }}
+          >
+            <SelectTrigger className="w-full text-sm">
+              <SelectValue placeholder="Select Faculty Member" />
+            </SelectTrigger>
+            <SelectContent>
+              {facultyAvailability.map(({ faculty, isAvailable, allocatedHours, maxHours, conflictReason, conflictDetail }) => (
+                <SelectItem key={faculty.id} value={faculty.id} disabled={!isAvailable}>
+                  <div className="flex flex-col gap-0.5 py-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className={isAvailable ? 'text-emerald-600' : 'text-rose-500'} aria-hidden>{isAvailable ? '✓' : '✕'}</span>
+                      <span className="font-semibold">{faculty.name}</span>
+                      <span className="text-muted-foreground text-[11px] ml-auto shrink-0">{allocatedHours}/{maxHours}h</span>
+                    </div>
+                    {!isAvailable && (
+                      <div className="text-[11px] text-rose-600 font-medium pl-4">
+                        {conflictReason}{conflictDetail ? ` — ${conflictDetail}` : ''}
+                      </div>
+                    )}
+                  </div>
+                </SelectItem>
               ))}
-            </select>
-          </div>
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Subject Select */}
         <div>
-          <div className="flex items-center justify-between mb-1.5">
-            <label className="block text-xs font-bold text-foreground uppercase tracking-wider">
+          <div className="flex items-center justify-between mb-2">
+            <label className="block text-sm font-bold text-foreground uppercase tracking-wider">
               Subject *
             </label>
             {facultyId && (
-              <span className="text-[11px] text-primary font-medium">
+              <span className="text-xs text-primary font-medium">
                 {availableSubjects.length} subjects taught
               </span>
             )}
           </div>
-          <select
-            aria-label="Select Subject"
+
+          <Select
             value={subjectId}
-            onChange={(e) => handleSubjectChange(e.target.value)}
-            required
-            className="w-full bg-surface border border-border rounded-xl px-3.5 py-2.5 text-sm font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-accent"
+            onValueChange={(val) => handleSubjectChange(val)}
           >
-            <option value="">-- Choose Subject --</option>
-            {availableSubjects.map((s) => (
-              <option key={s.id} value={s.id}>
-                [{s.code}] {s.name} ({s.type.toUpperCase()})
-              </option>
-            ))}
-          </select>
+            <SelectTrigger className="w-full text-sm">
+              <SelectValue placeholder="Select Subject" />
+            </SelectTrigger>
+            <SelectContent>
+              {availableSubjects.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono font-bold text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">{s.code}</span>
+                    <span className="font-medium">{s.name}</span>
+                    <span className="text-muted-foreground text-[11px] ml-auto">{s.type.toUpperCase()}</span>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Location Assignment */}
         {selectedTargetType === 'class' && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
             <div>
-              <label className="block text-xs font-bold text-foreground uppercase tracking-wider mb-1.5">
+              <label className="block text-sm font-bold text-foreground uppercase tracking-wider mb-2">
                 Lecture Room
               </label>
-              <select
-                aria-label="Select Lecture Room"
-                value={roomId}
-                onChange={(e) => setRoomId(e.target.value)}
-                className="w-full bg-surface border border-border rounded-xl px-3 py-2 text-xs font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-accent"
-              >
-                <option value="">-- Default Class Room --</option>
-                {rooms.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name} ({r.capacity} seats)
-                  </option>
-                ))}
-              </select>
+              <Select value={roomId} onValueChange={(val) => setRoomId(val)}>
+                <SelectTrigger className="w-full text-sm">
+                  <SelectValue placeholder="Auto-selected or choose room" />
+                </SelectTrigger>
+                <SelectContent>
+                  {rooms.map((r) => (
+                    <SelectItem key={r.id} value={r.id}>
+                      <span className="font-semibold font-mono">{r.name}</span>
+                      <span className="text-muted-foreground text-xs ml-2">{r.capacity} seats</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {duration === 2 && (
               <div>
-                <label className="block text-xs font-bold text-foreground uppercase tracking-wider mb-1.5">
+                <label className="block text-sm font-bold text-foreground uppercase tracking-wider mb-2">
                   Lab Facility
                 </label>
-                <select
-                  aria-label="Select Lab Facility"
-                  value={labId}
-                  onChange={(e) => setLabId(e.target.value)}
-                  className="w-full bg-surface border border-border rounded-xl px-3 py-2 text-xs font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-accent"
-                >
-                  <option value="">-- Assign Lab --</option>
-                  {labs.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.name} ({l.capacity} cap)
-                    </option>
-                  ))}
-                </select>
+                <Select value={labId} onValueChange={(val) => setLabId(val)}>
+                  <SelectTrigger className="w-full text-sm">
+                    <SelectValue placeholder="Select Lab" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {labs.map((l) => (
+                      <SelectItem key={l.id} value={l.id}>
+                        <span className="font-semibold">{l.name}</span>
+                        <span className="text-muted-foreground text-xs ml-2">{l.capacity} cap</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             )}
           </div>
@@ -389,23 +418,22 @@ export function SlotDrawer() {
         {/* If target is Lab/Room, which Class is attending */}
         {selectedTargetType !== 'class' && (
           <div>
-            <label className="block text-xs font-bold text-foreground uppercase tracking-wider mb-1.5">
+            <label className="block text-sm font-bold text-foreground uppercase tracking-wider mb-2">
               Attending Student Group / Class *
             </label>
-            <select
-              aria-label="Select Attending Student Group"
-              value={classId}
-              onChange={(e) => setClassId(e.target.value)}
-              required
-              className="w-full bg-surface border border-border rounded-xl px-3.5 py-2.5 text-sm font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-accent"
-            >
-              <option value="">-- Choose Class --</option>
-              {classes.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} (Sem {c.semester} - Sec {c.section})
-                </option>
-              ))}
-            </select>
+            <Select value={classId} onValueChange={(val) => setClassId(val)}>
+              <SelectTrigger className="w-full text-sm">
+                <SelectValue placeholder="Select Attending Class" />
+              </SelectTrigger>
+              <SelectContent>
+                {classes.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    <span className="font-semibold">{c.name}</span>
+                    <span className="text-muted-foreground text-xs ml-2">Sem {c.semester} · Sec {c.section}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         )}
 

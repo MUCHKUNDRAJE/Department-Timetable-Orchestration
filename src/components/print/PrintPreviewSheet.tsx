@@ -4,7 +4,7 @@ import React, { forwardRef } from 'react';
 import { INSTITUTION_INFO, DAYS, TIME_SLOTS } from '@/lib/constants';
 import { CollegeClass, Lab, Room, Faculty, Subject, Assignment, PrintMode, Day } from '@/types/timetable';
 import { Building2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, getSubjectInitials, getFacultyInitials, getVenueDisplay } from '@/lib/utils';
 
 interface PrintPreviewSheetProps {
   mode: PrintMode;
@@ -115,15 +115,26 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
 
         {/* Timetable 8x6 Grid Table */}
         <div className="border-2 border-slate-900 rounded-lg overflow-hidden mb-5">
-          <table className="w-full border-collapse text-center">
+          <table className="w-full table-fixed border-collapse text-center">
+            <colgroup>
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '11.25%' }} />
+              <col style={{ width: '11.25%' }} />
+              <col style={{ width: '11.25%' }} />
+              <col style={{ width: '11.25%' }} />
+              <col style={{ width: '11.25%' }} />
+              <col style={{ width: '11.25%' }} />
+              <col style={{ width: '11.25%' }} />
+              <col style={{ width: '11.25%' }} />
+            </colgroup>
             <thead>
               <tr className="bg-slate-100 border-b-2 border-slate-900 text-[11px] font-bold text-slate-800">
-                <th className="p-2 border-r-2 border-slate-900 w-24">DAY \ TIME</th>
+                <th className="p-2 border-r-2 border-slate-900">DAY \ TIME</th>
                 {TIME_SLOTS.map((slot) => (
-                  <th key={slot.id} className="p-2 border-r border-slate-300 last:border-r-0">
-                    <div className="font-mono">{slot.shortLabel}</div>
-                    <div className="text-[9px] text-slate-500 font-normal">
-                      {slot.start}-{slot.end}
+                  <th key={slot.id} className="p-1.5 border-r border-slate-300 last:border-r-0 truncate">
+                    <div className="font-mono font-bold text-[10px]">{slot.shortLabel}</div>
+                    <div className="text-[8px] text-slate-500 font-normal truncate">
+                      {slot.start} - {slot.end}
                     </div>
                   </th>
                 ))}
@@ -152,31 +163,44 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
                       const lab = labs.find((l) => l.id === assignment.labId);
                       const cls = classes.find((c) => c.id === assignment.classId);
 
+                      const subjectInitials = getSubjectInitials(subj);
+                      const facultyInitials = getFacultyInitials(fac?.name);
+                      const venueDisplay = getVenueDisplay(room, lab);
+
                       return (
                         <td
                           key={`${day}-${slot.id}`}
                           colSpan={isLab ? 2 : 1}
+                          title={`${subj?.name} (${subj?.code}) | Faculty: ${fac?.name || 'Faculty'} | Venue: ${venueDisplay}`}
                           className={cn(
-                            'p-1.5 border-r border-slate-300 last:border-r-0 align-middle',
-                            isLab ? 'bg-pink-50/60 font-semibold' : 'bg-indigo-50/50'
+                            'p-1.5 border-r border-slate-300 last:border-r-0 align-middle overflow-hidden',
+                            isLab ? 'bg-pink-50/70 font-semibold' : 'bg-indigo-50/60'
                           )}
                         >
-                          <div className="flex flex-col items-center justify-center gap-0.5">
-                            <div className="font-mono text-xs font-bold text-slate-900">
-                              {subj?.code || 'CODE'}
+                          <div className="flex flex-col items-center justify-center gap-0.5 min-w-0 overflow-hidden font-mono">
+                            {/* Subject Initials */}
+                            <div className="text-xs font-black text-slate-900 tracking-wider truncate max-w-full">
+                              {subjectInitials}
                               {isLab && (
-                                <span className="ml-1 text-[9px] uppercase px-1 py-0.2 rounded bg-pink-200 text-pink-900 font-extrabold">
-                                  Lab (2h)
+                                <span className="ml-1 text-[8px] uppercase px-1 py-0.2 rounded bg-pink-200 text-pink-900 font-extrabold">
+                                  2h
                                 </span>
                               )}
                             </div>
-                            <div className="text-[10px] text-slate-700 font-medium truncate max-w-[110px]">
-                              {fac?.name || 'Faculty'}
+
+                            {/* Faculty Initials + Room No */}
+                            <div className="flex items-center justify-center gap-1 text-[10px] text-slate-800 font-bold truncate max-w-full">
+                              <span className="text-indigo-900">{facultyInitials}</span>
+                              <span className="text-slate-400">•</span>
+                              <span className="text-slate-600">{venueDisplay}</span>
                             </div>
-                            <div className="text-[9px] text-slate-500 font-mono">
-                              {mode === 'ug' && (lab?.name.split(' ')[0] || room?.name || 'Hall')}
-                              {mode !== 'ug' && cls?.name}
-                            </div>
+
+                            {/* Attending class if not UG mode */}
+                            {mode !== 'ug' && cls?.name && (
+                              <div className="text-[9px] text-slate-500 truncate max-w-full">
+                                {cls.name.split(' ')[0]}
+                              </div>
+                            )}
                           </div>
                         </td>
                       );
@@ -200,18 +224,18 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
 
         {/* Legend & Workload Summary */}
         <div className="grid grid-cols-3 gap-4 border border-slate-300 rounded-lg p-3 bg-slate-50/60 mb-6 text-[10px]">
-          <div className="col-span-2 space-y-1">
+          <div className="col-span-2 space-y-1.5">
             <span className="font-bold text-slate-800 uppercase tracking-wider">
-              Subject Code Index:
+              Subject & Faculty Reference Index:
             </span>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-1 mt-1">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-1">
               {legendSubjects.map((s) => (
                 <div key={s.id} className="flex items-center gap-1.5 truncate">
-                  <span className="font-mono font-bold text-slate-900 bg-white px-1.5 py-0.5 rounded border border-slate-300">
-                    {s.code}
+                  <span className="font-mono font-black text-slate-900 bg-white px-1.5 py-0.5 rounded border border-slate-300 shrink-0">
+                    {getSubjectInitials(s)}
                   </span>
                   <span className="truncate text-slate-700 font-medium">
-                    {s.name} ({s.type.toUpperCase()})
+                    {s.name} ({s.code})
                   </span>
                 </div>
               ))}

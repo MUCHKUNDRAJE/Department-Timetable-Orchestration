@@ -5,6 +5,13 @@ import { Users, FlaskConical, DoorOpen, Layers, BarChart2 } from 'lucide-react';
 import { useTimetableStore } from '@/lib/store';
 import { TargetType } from '@/types/timetable';
 import { Badge } from '@/components/ui/Badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 
 export function TargetSelector() {
@@ -97,18 +104,23 @@ export function TargetSelector() {
       <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
         <div className="flex items-center gap-2 flex-1 md:flex-initial">
           <Layers className="w-4 h-4 text-muted shrink-0" />
-          <select
-            aria-label="Select Target to Schedule"
-            value={selectedTargetId}
-            onChange={(e) => setSelectedTarget(selectedTargetType, e.target.value)}
-            className="bg-surface border border-border rounded-xl px-3.5 py-2 text-sm font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-accent w-full md:w-64 cursor-pointer hover:border-border-strong shadow-sm"
-          >
-            {currentTargets.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
+          <div className="w-full md:w-72">
+            <Select
+              value={selectedTargetId}
+              onValueChange={(val) => setSelectedTarget(selectedTargetType, val)}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select target entity" />
+              </SelectTrigger>
+              <SelectContent>
+                {currentTargets.map((item) => (
+                  <SelectItem key={item.id} value={item.id}>
+                    {item.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         {/* Status Pill */}

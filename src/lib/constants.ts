@@ -3,14 +3,14 @@ import { Day, TimeSlot } from '@/types/timetable';
 export const DAYS: Day[] = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export const TIME_SLOTS: TimeSlot[] = [
-  { id: 0, label: '09:00 AM - 10:00 AM', start: '09:00', end: '10:00', shortLabel: '9-10' },
-  { id: 1, label: '10:00 AM - 11:00 AM', start: '10:00', end: '11:00', shortLabel: '10-11' },
-  { id: 2, label: '11:00 AM - 12:00 PM', start: '11:00', end: '12:00', shortLabel: '11-12' },
-  { id: 3, label: '12:00 PM - 01:00 PM', start: '12:00', end: '13:00', shortLabel: '12-1' },
-  { id: 4, label: '01:00 PM - 02:00 PM', start: '13:00', end: '14:00', shortLabel: '1-2' },
-  { id: 5, label: '02:00 PM - 03:00 PM', start: '14:00', end: '15:00', shortLabel: '2-3' },
-  { id: 6, label: '03:00 PM - 04:00 PM', start: '15:00', end: '16:00', shortLabel: '3-4' },
-  { id: 7, label: '04:00 PM - 05:00 PM', start: '16:00', end: '17:00', shortLabel: '4-5' },
+  { id: 0, label: '09:00 AM - 10:00 AM', start: '09:00 AM', end: '10:00 AM', shortLabel: '9-10 AM' },
+  { id: 1, label: '10:00 AM - 11:00 AM', start: '10:00 AM', end: '11:00 AM', shortLabel: '10-11 AM' },
+  { id: 2, label: '11:00 AM - 12:00 PM', start: '11:00 AM', end: '12:00 PM', shortLabel: '11-12 AM' },
+  { id: 3, label: '12:00 PM - 01:00 PM', start: '12:00 PM', end: '01:00 PM', shortLabel: '12-1 PM' },
+  { id: 4, label: '01:00 PM - 02:00 PM', start: '01:00 PM', end: '02:00 PM', shortLabel: '1-2 PM' },
+  { id: 5, label: '02:00 PM - 03:00 PM', start: '02:00 PM', end: '03:00 PM', shortLabel: '2-3 PM' },
+  { id: 6, label: '03:00 PM - 04:00 PM', start: '03:00 PM', end: '04:00 PM', shortLabel: '3-4 PM' },
+  { id: 7, label: '04:00 PM - 05:00 PM', start: '04:00 PM', end: '05:00 PM', shortLabel: '4-5 PM' },
 ];
 
 export const SUBJECT_PALETTE = [

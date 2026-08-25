@@ -90,7 +90,7 @@ export default function HubPage() {
   ];
 
   return (
-    <div className="space-y-10 py-4">
+    <div className="space-y-10 py-2">
       {/* Institutional Department Banner */}
       <div className="bg-surface border border-border rounded-3xl p-8 shadow-card relative overflow-hidden">
         <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-bl from-primary/10 via-highlight/5 to-transparent rounded-full blur-3xl pointer-events-none" />

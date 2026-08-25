@@ -1,5 +1,5 @@
-import HubPage from './select/page';
+import { redirect } from 'next/navigation';
 
 export default function Home() {
-  return <HubPage />;
+  redirect('/select');
 }

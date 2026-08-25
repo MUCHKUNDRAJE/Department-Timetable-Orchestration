@@ -6,7 +6,7 @@ import { Plus, User, MapPin, FlaskConical, Clock } from 'lucide-react';
 import { useTimetableStore } from '@/lib/store';
 import { DAYS, TIME_SLOTS } from '@/lib/constants';
 import { Day, Assignment } from '@/types/timetable';
-import { cn } from '@/lib/utils';
+import { cn, getSubjectInitials, getFacultyInitials, getVenueDisplay } from '@/lib/utils';
 
 export function ScheduleGrid() {
   const selectedTargetType = useTimetableStore((s) => s.selectedTargetType);
@@ -48,37 +48,41 @@ export function ScheduleGrid() {
     <div className="bg-surface border border-border rounded-2xl shadow-subtle overflow-hidden">
       {/* Horizontally scrollable container for responsiveness */}
       <div className="overflow-x-auto">
-        <div className="min-w-[960px]">
-          {/* Header Row: Days & 8 Time Slots */}
-          <div className="grid grid-cols-[100px_repeat(8,1fr)] bg-surface-subtle border-b border-border text-xs font-semibold text-muted-foreground">
-            <div className="p-3.5 flex items-center justify-center border-r border-border font-bold uppercase tracking-wider text-[11px] text-foreground">
+        <div className="min-w-[1080px]">
+          {/* Header Row: Locked uniform columns for Day & 8 Time Slots */}
+          <div className="grid grid-cols-[100px_repeat(8,minmax(120px,1fr))] bg-surface-subtle border-b border-border text-xs font-semibold text-muted-foreground">
+            <div className="p-3 flex items-center justify-center border-r border-border font-bold uppercase tracking-wider text-[11px] text-foreground shrink-0">
               Day \ Time
             </div>
             {TIME_SLOTS.map((slot) => (
               <div
                 key={slot.id}
-                className="p-3 text-center border-r border-border last:border-r-0 flex flex-col items-center justify-center gap-0.5"
+                className="p-2.5 text-center border-r border-border last:border-r-0 flex flex-col items-center justify-center gap-0.5 min-w-0 overflow-hidden"
               >
-                <span className="font-mono text-foreground font-bold text-xs">{slot.shortLabel}</span>
-                <span className="text-[10px] text-muted tracking-tight">{slot.start} - {slot.end}</span>
+                <span className="font-mono text-foreground font-bold text-xs tracking-tight">
+                  {slot.shortLabel}
+                </span>
+                <span className="text-[10px] text-muted tracking-tight truncate">
+                  {slot.start} - {slot.end}
+                </span>
               </div>
             ))}
           </div>
 
-          {/* 6 Day Rows */}
+          {/* 6 Day Rows with strictly matching column templates */}
           {DAYS.map((day) => {
             return (
               <div
                 key={day}
-                className="grid grid-cols-[100px_repeat(8,1fr)] border-b border-border last:border-b-0 min-h-[96px]"
+                className="grid grid-cols-[100px_repeat(8,minmax(120px,1fr))] border-b border-border last:border-b-0 min-h-[96px]"
               >
                 {/* Day Header Column */}
-                <div className="p-3.5 bg-surface-subtle/60 border-r border-border flex flex-col items-center justify-center gap-1 font-bold text-sm text-foreground">
+                <div className="p-3 bg-surface-subtle/60 border-r border-border flex flex-col items-center justify-center gap-1 font-bold text-sm text-foreground shrink-0 select-none">
                   <span className="tracking-wide uppercase text-xs">{day}</span>
                   <div className="w-1.5 h-1.5 rounded-full bg-accent" />
                 </div>
 
-                {/* 8 Slot Cells */}
+                {/* 8 Uniform Slot Cells */}
                 {TIME_SLOTS.map((slot) => {
                   const assignment = getAssignmentAt(day, slot.id);
                   const isCovered = isSlotCoveredByPreviousLab(day, slot.id);
@@ -96,77 +100,73 @@ export function ScheduleGrid() {
                   const attendingClass = classes.find((c) => c.id === assignment?.classId);
 
                   if (assignment) {
+                    const subjectInitials = getSubjectInitials(assignedSubject);
+                    const facultyInitials = getFacultyInitials(assignedFaculty?.name);
+                    const venueDisplay = getVenueDisplay(assignedRoom, assignedLab);
+
                     return (
                       <div
                         key={`${day}-${slot.id}`}
                         className={cn(
-                          'p-1.5 border-r border-border last:border-r-0 relative flex flex-col',
+                          'p-1.5 border-r border-border last:border-r-0 relative flex flex-col min-w-0 overflow-hidden',
                           isLab ? 'col-span-2 bg-highlight-light/30' : 'col-span-1 bg-surface'
                         )}
                       >
                         <motion.div
-                          whileHover={{ scale: 1.015, y: -1 }}
+                          whileHover={{ scale: 1.02, y: -1 }}
                           transition={{ duration: 0.15 }}
                           onClick={() => openSlotEditor(day, slot.id, assignment.duration, assignment.id)}
+                          title={`${assignedSubject?.name} (${assignedSubject?.code}) | Faculty: ${assignedFaculty?.name || 'Unassigned'} | Venue: ${assignedLab?.name || assignedRoom?.name || 'Classroom'}`}
                           className={cn(
-                            'w-full h-full rounded-xl p-2.5 flex flex-col justify-between cursor-pointer border transition-all duration-150 relative group',
+                            'w-full h-[84px] min-h-[84px] max-h-[84px] rounded-xl p-2 flex flex-col justify-between cursor-pointer border transition-all duration-150 relative group min-w-0 overflow-hidden select-none',
                             isLab
-                              ? 'bg-gradient-to-r from-pink-500/10 via-purple-500/10 to-indigo-500/10 border-highlight/40 hover:border-highlight hover:shadow-card'
-                              : 'bg-primary-light/40 border-primary/20 hover:border-primary/60 hover:shadow-card'
+                              ? 'bg-gradient-to-r from-pink-500/15 via-purple-500/10 to-indigo-500/15 border-highlight/50 hover:border-highlight hover:shadow-card'
+                              : 'bg-primary-light/50 border-primary/25 hover:border-primary/70 hover:shadow-card'
                           )}
                         >
-                          {/* Top Row: Subject code + Lab Tag / Duration */}
-                          <div className="flex items-start justify-between gap-1">
-                            <div className="flex items-center gap-1.5 flex-wrap">
+                          {/* Top Row: Subject initials + Lab indicator + Time */}
+                          <div className="flex items-center justify-between gap-1 min-w-0">
+                            <div className="flex items-center gap-1.5 min-w-0">
                               <span
                                 className={cn(
-                                  'font-mono text-xs font-extrabold px-1.5 py-0.5 rounded tracking-wide',
-                                  isLab
-                                    ? 'bg-highlight text-white shadow-sm'
-                                    : 'bg-primary text-white shadow-sm'
+                                  'font-mono text-xs font-black px-1.5 py-0.5 rounded tracking-wider shadow-xs shrink-0',
+                                  isLab ? 'bg-highlight text-white' : 'bg-primary text-white'
                                 )}
                               >
-                                {assignedSubject?.code || 'SUBJ'}
+                                {subjectInitials}
                               </span>
                               {isLab && (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-highlight uppercase tracking-wider bg-highlight/10 px-1.5 py-0.5 rounded">
-                                  <FlaskConical className="w-2.5 h-2.5" />
-                                  2-Hr Lab
+                                <span className="text-[9px] font-extrabold uppercase tracking-wider text-highlight bg-highlight/15 px-1 py-0.2 rounded shrink-0">
+                                  2h
                                 </span>
                               )}
                             </div>
-                            <span className="text-[10px] font-mono text-muted flex items-center gap-0.5 opacity-70 group-hover:opacity-100">
+                            <span className="text-[10px] font-mono text-muted flex items-center gap-0.5 opacity-70 group-hover:opacity-100 shrink-0">
                               <Clock className="w-2.5 h-2.5" />
                               {TIME_SLOTS[slot.id]?.shortLabel}
                             </span>
                           </div>
 
-                          {/* Middle: Subject Name */}
-                          <div className="my-1">
-                            <p className="text-xs font-bold text-foreground line-clamp-2 leading-tight">
-                              {assignedSubject?.name || 'Assigned Lecture'}
-                            </p>
-                          </div>
-
-                          {/* Bottom: Faculty & Room */}
-                          <div className="flex items-center justify-between text-[11px] text-muted-foreground gap-1 border-t border-border/50 pt-1.5 mt-auto">
-                            <div className="flex items-center gap-1 truncate font-medium">
-                              <User className="w-3 h-3 text-muted shrink-0" />
-                              <span className="truncate">{assignedFaculty?.name || 'Faculty'}</span>
+                          {/* Middle Row: Faculty Initials + Room No */}
+                          <div className="my-auto flex items-center justify-between gap-1 font-mono text-[11px] font-bold text-foreground min-w-0">
+                            <div className="flex items-center gap-1 text-primary truncate">
+                              <User className="w-3 h-3 shrink-0 opacity-80" />
+                              <span className="truncate">{facultyInitials}</span>
                             </div>
 
-                            {/* Location / Class Info */}
-                            {selectedTargetType === 'class' && (
-                              <div className="flex items-center gap-1 shrink-0 font-mono text-[10px] font-semibold text-primary">
-                                <MapPin className="w-2.5 h-2.5 shrink-0" />
-                                <span>{assignedLab?.name.split(' ')[0] || assignedRoom?.name || 'Class'}</span>
-                              </div>
-                            )}
+                            <div className="flex items-center gap-0.5 text-muted-foreground truncate text-[10px]">
+                              <MapPin className="w-2.5 h-2.5 shrink-0 text-muted" />
+                              <span className="truncate font-semibold">{venueDisplay}</span>
+                            </div>
+                          </div>
 
+                          {/* Bottom Row: Full Subject Code & Class info */}
+                          <div className="flex items-center justify-between text-[9px] text-muted font-mono border-t border-border/60 pt-0.5 min-w-0">
+                            <span className="truncate">{assignedSubject?.code || 'CODE'}</span>
                             {selectedTargetType !== 'class' && attendingClass && (
-                              <div className="flex items-center gap-1 shrink-0 text-[10px] font-bold text-primary truncate max-w-[80px]">
-                                <span>{attendingClass.name}</span>
-                              </div>
+                              <span className="text-primary font-bold truncate max-w-[65px]">
+                                {attendingClass.name.split(' ')[0]}
+                              </span>
                             )}
                           </div>
                         </motion.div>
@@ -179,17 +179,17 @@ export function ScheduleGrid() {
                   return (
                     <div
                       key={`${day}-${slot.id}`}
-                      className="p-1.5 border-r border-border last:border-r-0 col-span-1"
+                      className="p-1.5 border-r border-border last:border-r-0 col-span-1 min-w-0 overflow-hidden"
                     >
                       <button
                         onClick={() => openSlotEditor(day, slot.id, isLabTarget ? 2 : 1)}
-                        className="w-full h-full min-h-[82px] rounded-xl border border-dashed border-border hover:border-accent hover:bg-accent-light/30 transition-all flex flex-col items-center justify-center text-muted hover:text-primary gap-1 group slot-dashed-pattern"
+                        className="w-full h-[84px] min-h-[84px] max-h-[84px] rounded-xl border border-dashed border-border hover:border-accent hover:bg-accent-light/30 transition-all flex flex-col items-center justify-center text-muted hover:text-primary gap-1 group slot-dashed-pattern min-w-0"
                       >
-                        <div className="w-6 h-6 rounded-full bg-surface border border-border group-hover:border-accent group-hover:bg-primary group-hover:text-white flex items-center justify-center shadow-xs transition-colors">
-                          <Plus className="w-3.5 h-3.5" />
+                        <div className="w-5 h-5 rounded-full bg-surface border border-border group-hover:border-accent group-hover:bg-primary group-hover:text-white flex items-center justify-center shadow-xs transition-colors">
+                          <Plus className="w-3 h-3" />
                         </div>
-                        <span className="text-[10px] font-medium opacity-60 group-hover:opacity-100">
-                          {isLabTarget ? 'Schedule 2h Lab' : 'Add Slot'}
+                        <span className="text-[10px] font-medium opacity-60 group-hover:opacity-100 truncate max-w-[90%]">
+                          {isLabTarget ? '+ 2h Lab' : '+ Add Slot'}
                         </span>
                       </button>
                     </div>

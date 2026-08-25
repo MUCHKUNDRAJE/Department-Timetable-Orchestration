@@ -14,7 +14,8 @@ export const SEED_LABS: Lab[] = [
 ];
 
 export const SEED_ROOMS: Room[] = [
-  { id: 'room_el_301', name: 'EL-301 (Smart Lecture Hall)', capacity: 75, building: 'Engineering Block 3rd Floor', type: 'lecture' },
+  { id: 'room_el_202', name: 'EL-202 (Smart Lecture Hall)', capacity: 72, building: 'Engineering Block 2nd Floor', type: 'lecture' },
+  { id: 'room_el_301', name: 'EL-301 (Lecture Hall)', capacity: 75, building: 'Engineering Block 3rd Floor', type: 'lecture' },
   { id: 'room_el_302', name: 'EL-302', capacity: 70, building: 'Engineering Block 3rd Floor', type: 'lecture' },
   { id: 'room_el_303', name: 'EL-303', capacity: 70, building: 'Engineering Block 3rd Floor', type: 'lecture' },
   { id: 'room_lh_101', name: 'LH-101 (Tiered Theater)', capacity: 90, building: 'Academic Annex 1st Floor', type: 'seminar' },
@@ -25,6 +26,7 @@ export const SEED_SUBJECTS: Subject[] = [
   { id: 'subj_cs701', name: 'Deep Learning & Neural Nets', code: 'CS701', type: 'lecture', color: '#5755FE', department: 'AIDS', semester: 7 },
   { id: 'subj_cs702', name: 'Deep Learning Lab', code: 'CS702', type: 'lab', color: '#FF71CD', department: 'AIDS', semester: 7 },
   { id: 'subj_cs703', name: 'Natural Language Processing', code: 'CS703', type: 'lecture', color: '#8B93FF', department: 'AIDS', semester: 7 },
+  { id: 'subj_cs704', name: 'Optimum Theory', code: 'CS704', type: 'lecture', color: '#0284C7', department: 'AIDS', semester: 7 },
   { id: 'subj_cs501', name: 'Distributed Systems & Cloud', code: 'CS501', type: 'lecture', color: '#0284C7', department: 'AIDS', semester: 5 },
   { id: 'subj_cs502', name: 'Cloud Computing Lab', code: 'CS502', type: 'lab', color: '#FF71CD', department: 'AIDS', semester: 5 },
   { id: 'subj_cs503', name: 'Machine Learning Principles', code: 'CS503', type: 'lecture', color: '#10B981', department: 'AIDS', semester: 5 },
@@ -33,6 +35,15 @@ export const SEED_SUBJECTS: Subject[] = [
 ];
 
 export const SEED_FACULTY: Faculty[] = [
+  {
+    id: 'fac_kiran_khadare',
+    name: 'Prof. Kiran Khadare',
+    department: 'Artificial Intelligence & Data Science',
+    designation: 'Assistant Professor',
+    email: 'kiran.khadare@mits.edu',
+    maxWeeklyHours: 20,
+    subjectIds: ['subj_cs704', 'subj_cs501', 'subj_cs301'],
+  },
   {
     id: 'fac_sarah_vance',
     name: 'Dr. Sarah Vance',

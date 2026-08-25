@@ -175,7 +175,11 @@ export function getFacultyAvailabilityForSlot(
   duration: 1 | 2,
   assignments: Assignment[],
   facultyList: Faculty[],
-  excludeAssignmentId?: string
+  excludeAssignmentId?: string,
+  subjectList: Subject[] = [],
+  classList: CollegeClass[] = [],
+  labList: Lab[] = [],
+  roomList: Room[] = []
 ) {
   return facultyList.map((faculty) => {
     const allocatedHours = calculateFacultyAllocatedHours(faculty.id, assignments, excludeAssignmentId);
@@ -191,11 +195,43 @@ export function getFacultyAvailabilityForSlot(
 
     const isAvailable = !conflictingAssignment && !wouldExceedHours;
 
-    let reason = '';
+    let conflictReason = '';
+    let conflictDetail = '';
+
     if (conflictingAssignment) {
-      reason = `Busy (${TIME_SLOTS[conflictingAssignment.startSlot]?.shortLabel})`;
+      const slotLabel = TIME_SLOTS[conflictingAssignment.startSlot]?.shortLabel ?? '';
+      const subjName = subjectList.find((s) => s.id === conflictingAssignment.subjectId)?.name || 'a session';
+      const subjCode = subjectList.find((s) => s.id === conflictingAssignment.subjectId)?.code || '';
+
+      // Determine class name
+      let className = '';
+      if (conflictingAssignment.targetType === 'class') {
+        className = classList.find((c) => c.id === conflictingAssignment.targetId)?.name || '';
+      } else if (conflictingAssignment.classId) {
+        className = classList.find((c) => c.id === conflictingAssignment.classId)?.name || '';
+      }
+
+      // Determine venue
+      let venueName = '';
+      if (conflictingAssignment.targetType === 'lab') {
+        venueName = labList.find((l) => l.id === conflictingAssignment.targetId)?.name || '';
+      } else if (conflictingAssignment.targetType === 'room') {
+        venueName = roomList.find((r) => r.id === conflictingAssignment.targetId)?.name || '';
+      } else if (conflictingAssignment.labId) {
+        venueName = labList.find((l) => l.id === conflictingAssignment.labId)?.name || '';
+      } else if (conflictingAssignment.roomId) {
+        venueName = roomList.find((r) => r.id === conflictingAssignment.roomId)?.name || '';
+      }
+
+      conflictReason = `Busy at ${slotLabel}`;
+      const parts = [];
+      if (subjCode) parts.push(subjCode);
+      if (className) parts.push(className);
+      if (venueName) parts.push(venueName);
+      conflictDetail = parts.join(' · ');
     } else if (wouldExceedHours) {
-      reason = `Max hours reached (${allocatedHours}/${faculty.maxWeeklyHours}h)`;
+      conflictReason = `Max hours reached (${allocatedHours}/${faculty.maxWeeklyHours}h)`;
+      conflictDetail = '';
     }
 
     return {
@@ -203,7 +239,8 @@ export function getFacultyAvailabilityForSlot(
       isAvailable,
       allocatedHours,
       maxHours: faculty.maxWeeklyHours,
-      conflictReason: reason,
+      conflictReason,
+      conflictDetail,
       conflictingAssignment,
     };
   });

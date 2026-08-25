@@ -16,6 +16,13 @@ import {
 import { useTimetableStore } from '@/lib/store';
 import { PrintMode } from '@/types/timetable';
 import { Button } from '@/components/ui/Button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { PrintPreviewSheet } from './PrintPreviewSheet';
 import { exportElementToPdf, exportMultipleElementsToPdf } from '@/lib/pdf-export';
 import { cn } from '@/lib/utils';
@@ -133,19 +140,22 @@ export function PrintStudio() {
       <div className="bg-surface border border-border rounded-2xl p-4 shadow-subtle flex flex-col md:flex-row items-start md:items-center justify-between gap-4 no-print">
         <div className="flex items-center gap-3 w-full md:w-auto">
           <Layers className="w-4 h-4 text-muted shrink-0" />
-          <div className="flex-1 md:flex-initial">
-            <select
-              aria-label="Select Target to Preview"
+          <div className="w-full md:w-72">
+            <Select
               value={selectedTargetId}
-              onChange={(e) => setSelectedTargetId(e.target.value)}
-              className="bg-surface border border-border rounded-xl px-4 py-2 text-sm font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-accent shadow-xs w-full md:w-72"
+              onValueChange={(val) => setSelectedTargetId(val)}
             >
-              {currentList.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select target entity" />
+              </SelectTrigger>
+              <SelectContent>
+                {currentList.map((item) => (
+                  <SelectItem key={item.id} value={item.id}>
+                    {item.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <span className="text-xs text-muted font-medium hidden sm:inline">
             ({currentList.length} total available)
