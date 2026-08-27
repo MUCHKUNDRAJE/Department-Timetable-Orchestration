@@ -22,7 +22,7 @@ export function Navbar() {
   ];
 
   return (
-    <header className="sticky top-0 z-40 bg-surface/90 backdrop-blur-md border-b border-border transition-all">
+    <header className="sticky top-0 z-40 bg-surface/90 backdrop-blur-md border-b border-border transition-all no-print">
       <div className="max-w-[1680px] mx-auto px-2 sm:px-4 lg:px-6">
         <div className="flex items-center justify-between h-16">
           {/* Institution Brand */}

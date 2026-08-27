@@ -28,16 +28,19 @@ export function getFacultyInitials(name?: string): string {
 }
 
 /**
- * Generates clean subject acronym / initials (e.g., "Optimum Theory" -> "OT", "Deep Learning Lab" -> "DL (Lab)")
+ * Generates clean subject acronym / initials (e.g., "Cloud Computing Lab" -> "CC", "Optimum Theory" -> "OT")
  */
-export function getSubjectInitials(subject?: Subject | { name: string; type?: string; code?: string }): string {
+export function getSubjectInitials(
+  subject?: Subject | { name: string; type?: string; code?: string },
+  includeLabSuffix = false
+): string {
   if (!subject) return 'SUBJ';
   const name = subject.name || '';
   const isLab = subject.type === 'lab' || name.toLowerCase().includes('lab');
 
-  // Strip "Lab", punctuation, and common connector words
+  // Strip "Lab", "Laboratory", punctuation, and common connector words
   const baseName = name
-    .replace(/\b(Lab|Laboratory)\b/gi, '')
+    .replace(/\b(Lab|Laboratory|Practicals|Practical)\b/gi, '')
     .replace(/[^a-zA-Z0-9\s]/g, ' ')
     .trim();
 
@@ -46,7 +49,7 @@ export function getSubjectInitials(subject?: Subject | { name: string; type?: st
 
   let acronym = '';
   if (words.length === 0) {
-    acronym = subject.code || 'SUB';
+    acronym = subject.code ? subject.code.replace(/[^a-zA-Z]/g, '') || subject.code : 'SUB';
   } else if (words.length === 1) {
     acronym = words[0].slice(0, 3).toUpperCase();
   } else if (words.length <= 4) {
@@ -55,7 +58,7 @@ export function getSubjectInitials(subject?: Subject | { name: string; type?: st
     acronym = words.slice(0, 3).map((w) => w[0].toUpperCase()).join('');
   }
 
-  return isLab ? `${acronym} (Lab)` : acronym;
+  return isLab && includeLabSuffix ? `${acronym} (Lab)` : acronym;
 }
 
 /**

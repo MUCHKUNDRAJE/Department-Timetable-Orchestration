@@ -105,7 +105,7 @@ export default function HubPage() {
               Department Timetable Orchestration
             </h1>
             <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
-              {INSTITUTION_INFO.department} — Metropolitan Institute of Technology & Science.
+              {INSTITUTION_INFO.department} — Yeshwantrao Chavan College of Engineering.
               Coordinate conflict-free lecture and lab allocations across faculty and venues.
             </p>
           </div>

@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { PrintPreviewSheet } from './PrintPreviewSheet';
-import { exportElementToPdf, exportMultipleElementsToPdf } from '@/lib/pdf-export';
+import { exportElementToPdf, exportMultipleElementsToPdf, printElementDirectly } from '@/lib/pdf-export';
 import { cn } from '@/lib/utils';
 
 export function PrintStudio() {
@@ -71,9 +71,13 @@ export function PrintStudio() {
     setIsExporting(false);
   };
 
-  // Browser Direct Print Dialog
+  // Browser Direct Print Dialog with isolated print engine
   const handleBrowserPrint = () => {
-    window.print();
+    if (printSheetRef.current) {
+      printElementDirectly(printSheetRef.current);
+    } else {
+      window.print();
+    }
   };
 
   // Bulk PDF Export: Generates multi-page PDF of all items in current category

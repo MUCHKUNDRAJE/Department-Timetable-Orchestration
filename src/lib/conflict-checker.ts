@@ -245,3 +245,187 @@ export function getFacultyAvailabilityForSlot(
     };
   });
 }
+
+/**
+ * Returns available room list with real-time conflict status for a specific slot.
+ */
+export function getRoomAvailabilityForSlot(
+  day: Day,
+  startSlot: number,
+  duration: 1 | 2,
+  assignments: Assignment[],
+  roomList: Room[],
+  excludeAssignmentId?: string,
+  subjectList: Subject[] = [],
+  classList: CollegeClass[] = [],
+  facultyList: Faculty[] = []
+) {
+  return roomList.map((room) => {
+    // Find if any assignment on this day & slot is using this room
+    const conflictingAssignment = assignments.find((a) => {
+      if (a.id === excludeAssignmentId) return false;
+      if (a.day !== day) return false;
+      
+      const isThisRoomUsed =
+        (a.targetType === 'room' && a.targetId === room.id) || a.roomId === room.id;
+      
+      if (!isThisRoomUsed) return false;
+      return isSlotOverlapping(startSlot, duration, a.startSlot, a.duration);
+    });
+
+    const isAvailable = !conflictingAssignment;
+    let conflictReason = '';
+    let conflictDetail = '';
+
+    if (conflictingAssignment) {
+      const slotLabel = TIME_SLOTS[conflictingAssignment.startSlot]?.shortLabel ?? '';
+      const subj = subjectList.find((s) => s.id === conflictingAssignment.subjectId);
+      const fac = facultyList.find((f) => f.id === conflictingAssignment.facultyId);
+      
+      let className = '';
+      if (conflictingAssignment.targetType === 'class') {
+        className = classList.find((c) => c.id === conflictingAssignment.targetId)?.name || '';
+      } else if (conflictingAssignment.classId) {
+        className = classList.find((c) => c.id === conflictingAssignment.classId)?.name || '';
+      }
+
+      conflictReason = `In use at ${slotLabel}`;
+      const parts = [];
+      if (subj?.code) parts.push(subj.code);
+      if (className) parts.push(className);
+      if (fac?.name) parts.push(`(${fac.name})`);
+      conflictDetail = parts.join(' · ');
+    }
+
+    return {
+      room,
+      isAvailable,
+      conflictReason,
+      conflictDetail,
+      conflictingAssignment,
+    };
+  });
+}
+
+/**
+ * Returns available lab list with real-time conflict status for a specific slot.
+ */
+export function getLabAvailabilityForSlot(
+  day: Day,
+  startSlot: number,
+  duration: 1 | 2,
+  assignments: Assignment[],
+  labList: Lab[],
+  excludeAssignmentId?: string,
+  subjectList: Subject[] = [],
+  classList: CollegeClass[] = [],
+  facultyList: Faculty[] = []
+) {
+  return labList.map((lab) => {
+    // Find if any assignment on this day & slot is using this lab
+    const conflictingAssignment = assignments.find((a) => {
+      if (a.id === excludeAssignmentId) return false;
+      if (a.day !== day) return false;
+      
+      const isThisLabUsed =
+        (a.targetType === 'lab' && a.targetId === lab.id) || a.labId === lab.id;
+      
+      if (!isThisLabUsed) return false;
+      return isSlotOverlapping(startSlot, duration, a.startSlot, a.duration);
+    });
+
+    const isAvailable = !conflictingAssignment;
+    let conflictReason = '';
+    let conflictDetail = '';
+
+    if (conflictingAssignment) {
+      const slotLabel = TIME_SLOTS[conflictingAssignment.startSlot]?.shortLabel ?? '';
+      const subj = subjectList.find((s) => s.id === conflictingAssignment.subjectId);
+      const fac = facultyList.find((f) => f.id === conflictingAssignment.facultyId);
+      
+      let className = '';
+      if (conflictingAssignment.targetType === 'class') {
+        className = classList.find((c) => c.id === conflictingAssignment.targetId)?.name || '';
+      } else if (conflictingAssignment.classId) {
+        className = classList.find((c) => c.id === conflictingAssignment.classId)?.name || '';
+      }
+
+      conflictReason = `In use at ${slotLabel}`;
+      const parts = [];
+      if (subj?.code) parts.push(subj.code);
+      if (className) parts.push(className);
+      if (fac?.name) parts.push(`(${fac.name})`);
+      conflictDetail = parts.join(' · ');
+    }
+
+    return {
+      lab,
+      isAvailable,
+      conflictReason,
+      conflictDetail,
+      conflictingAssignment,
+    };
+  });
+}
+
+/**
+ * Returns available class list with real-time conflict status for a specific slot.
+ */
+export function getClassAvailabilityForSlot(
+  day: Day,
+  startSlot: number,
+  duration: 1 | 2,
+  assignments: Assignment[],
+  classList: CollegeClass[],
+  excludeAssignmentId?: string,
+  subjectList: Subject[] = [],
+  labList: Lab[] = [],
+  roomList: Room[] = []
+) {
+  return classList.map((cls) => {
+    const conflictingAssignment = assignments.find((a) => {
+      if (a.id === excludeAssignmentId) return false;
+      if (a.day !== day) return false;
+
+      const isThisClassInvolved =
+        (a.targetType === 'class' && a.targetId === cls.id) || a.classId === cls.id;
+
+      if (!isThisClassInvolved) return false;
+      return isSlotOverlapping(startSlot, duration, a.startSlot, a.duration);
+    });
+
+    const isAvailable = !conflictingAssignment;
+    let conflictReason = '';
+    let conflictDetail = '';
+
+    if (conflictingAssignment) {
+      const slotLabel = TIME_SLOTS[conflictingAssignment.startSlot]?.shortLabel ?? '';
+      const subj = subjectList.find((s) => s.id === conflictingAssignment.subjectId);
+      
+      let venueName = '';
+      if (conflictingAssignment.targetType === 'lab') {
+        venueName = labList.find((l) => l.id === conflictingAssignment.targetId)?.name || '';
+      } else if (conflictingAssignment.targetType === 'room') {
+        venueName = roomList.find((r) => r.id === conflictingAssignment.targetId)?.name || '';
+      } else if (conflictingAssignment.labId) {
+        venueName = labList.find((l) => l.id === conflictingAssignment.labId)?.name || '';
+      } else if (conflictingAssignment.roomId) {
+        venueName = roomList.find((r) => r.id === conflictingAssignment.roomId)?.name || '';
+      }
+
+      conflictReason = `Busy at ${slotLabel}`;
+      const parts = [];
+      if (subj?.code) parts.push(subj.code);
+      if (venueName) parts.push(venueName);
+      conflictDetail = parts.join(' · ');
+    }
+
+    return {
+      collegeClass: cls,
+      isAvailable,
+      conflictReason,
+      conflictDetail,
+      conflictingAssignment,
+    };
+  });
+}

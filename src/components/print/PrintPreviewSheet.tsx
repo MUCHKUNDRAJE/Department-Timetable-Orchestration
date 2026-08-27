@@ -3,7 +3,7 @@
 import React, { forwardRef } from 'react';
 import { INSTITUTION_INFO, DAYS, TIME_SLOTS } from '@/lib/constants';
 import { CollegeClass, Lab, Room, Faculty, Subject, Assignment, PrintMode, Day } from '@/types/timetable';
-import { Building2 } from 'lucide-react';
+import { Building2, UserCheck, BookOpen, Clock, CalendarDays } from 'lucide-react';
 import { cn, getSubjectInitials, getFacultyInitials, getVenueDisplay } from '@/lib/utils';
 
 interface PrintPreviewSheetProps {
@@ -19,7 +19,7 @@ interface PrintPreviewSheetProps {
 
 export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetProps>(
   ({ mode, targetId, classes, labs, rooms, facultyList, subjects, assignments }, ref) => {
-    // Determine Target Title and Subtitle
+    // Determine Target Title, Subtitle and Type
     let title = '';
     let subtitle = '';
     let entityType = '';
@@ -43,7 +43,7 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
       const fac = facultyList.find((f) => f.id === targetId) || facultyList[0];
       entityType = 'FACULTY INDIVIDUAL WORKLOAD TIMETABLE';
       title = fac ? `${fac.name} (${fac.designation})` : 'Faculty Timetable';
-      subtitle = `Department of ${fac?.department || 'AI & DS'} | Max Load: ${fac?.maxWeeklyHours || 20} hrs/week`;
+      subtitle = `Department of ${fac?.department || 'AI & DS'} | Max Allowance: ${fac?.maxWeeklyHours || 20} hrs/week`;
     }
 
     // Filter assignments for this specific target
@@ -73,30 +73,58 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
       return !!prev;
     };
 
-    // Extract unique subjects in this timetable for the legend
+    // Extract subjects and faculty involved in this schedule
     const usedSubjectIds = Array.from(new Set(currentAssignments.map((a) => a.subjectId)));
-    const legendSubjects = subjects.filter((s) => usedSubjectIds.includes(s.id));
+    const activeSubjects = subjects.filter((s) => usedSubjectIds.includes(s.id));
+    // If no assignments yet, show department subjects
+    const displaySubjects = activeSubjects.length > 0 ? activeSubjects : subjects.slice(0, 8);
 
-    // Calculate total hours
-    const totalWeeklyHours = currentAssignments.reduce((acc, curr) => acc + curr.duration, 0);
+    const usedFacultyIds = Array.from(new Set(currentAssignments.map((a) => a.facultyId)));
+    const activeFaculty = facultyList.filter((f) => usedFacultyIds.includes(f.id));
+    const displayFaculty = activeFaculty.length > 0 ? activeFaculty : facultyList.slice(0, 8);
+
+    // Faculty hours map for the current schedule
+    const facultyScheduleHours = new Map<string, number>();
+    currentAssignments.forEach((a) => {
+      facultyScheduleHours.set(
+        a.facultyId,
+        (facultyScheduleHours.get(a.facultyId) || 0) + (a.duration || 1)
+      );
+    });
+
+    // Find assigned faculty for a subject
+    const getFacultyForSubject = (subjId: string) => {
+      const asg = currentAssignments.find((a) => a.subjectId === subjId);
+      if (asg) {
+        const f = facultyList.find((fac) => fac.id === asg.facultyId);
+        return f ? getFacultyInitials(f.name) : '—';
+      }
+      const mapped = facultyList.find((f) => f.subjectIds?.includes(subjId));
+      return mapped ? getFacultyInitials(mapped.name) : '—';
+    };
+
+    // Calculate total hours, lectures, and lab counts
+    const totalWeeklyHours = currentAssignments.reduce((acc, curr) => acc + (curr.duration || 1), 0);
+    const totalLabBlocks = currentAssignments.filter((a) => a.duration === 2).length;
+    const totalLectures = currentAssignments.filter((a) => a.duration === 1).length;
 
     return (
       <div
         ref={ref}
-        className="bg-white text-slate-900 p-8 rounded-xl border border-slate-300 shadow-md font-sans text-xs print:p-0 print:border-none print:shadow-none min-w-[920px]"
+        className="bg-white text-slate-900 p-6 sm:p-8 rounded-xl border border-slate-300 shadow-md font-sans text-xs print:p-4 sm:print:p-6 print:border-none print:shadow-none w-full max-w-[1200px] mx-auto print:max-w-none print:w-full box-border"
       >
         {/* Official Institutional Header */}
-        <div className="border-b-2 border-slate-900 pb-4 mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold">
+        <div className="border-b-2 border-slate-900 pb-3 mb-3.5 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div className="w-12 h-12 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold shrink-0">
               <Building2 className="w-6 h-6 text-white" />
             </div>
-            <div>
-              <h1 className="text-sm font-extrabold tracking-wider uppercase text-slate-900">
+            <div className="min-w-0">
+              <h1 className="text-sm sm:text-base font-extrabold tracking-wider uppercase text-slate-900 leading-tight truncate">
                 {INSTITUTION_INFO.collegeName}
               </h1>
-              <p className="text-xs font-semibold text-slate-700">{INSTITUTION_INFO.department}</p>
-              <div className="flex items-center gap-3 text-[10px] text-slate-500 font-mono mt-0.5">
+              <p className="text-xs font-semibold text-slate-700 truncate">{INSTITUTION_INFO.department}</p>
+              <div className="flex items-center gap-2.5 text-[10px] text-slate-500 font-mono mt-0.5">
                 <span>ACADEMIC YEAR: {INSTITUTION_INFO.academicYear}</span>
                 <span>•</span>
                 <span>EFFECTIVE: {INSTITUTION_INFO.effectiveDate}</span>
@@ -104,36 +132,40 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
             </div>
           </div>
 
-          <div className="text-right">
-            <span className="inline-block bg-slate-900 text-white text-[10px] font-bold px-2.5 py-1 rounded tracking-wider uppercase mb-1">
+          <div className="text-right shrink-0 max-w-[45%] pr-2">
+            <span className="inline-block bg-slate-900 text-white text-[10px] font-bold px-2.5 py-0.5 rounded tracking-wider uppercase mb-1">
               {entityType}
             </span>
-            <div className="text-sm font-bold text-slate-900">{title}</div>
-            <div className="text-[11px] text-slate-600">{subtitle}</div>
+            <div className="text-sm font-bold text-slate-900 leading-snug">{title}</div>
+            <div className="text-[11px] text-slate-600 font-medium leading-snug">{subtitle}</div>
           </div>
         </div>
 
         {/* Timetable 8x6 Grid Table */}
-        <div className="border-2 border-slate-900 rounded-lg overflow-hidden mb-5">
+        <div className="border-2 border-slate-900 rounded-lg overflow-hidden mb-3.5 bg-white">
           <table className="w-full table-fixed border-collapse text-center">
             <colgroup>
-              <col style={{ width: '10%' }} />
-              <col style={{ width: '11.25%' }} />
-              <col style={{ width: '11.25%' }} />
-              <col style={{ width: '11.25%' }} />
-              <col style={{ width: '11.25%' }} />
-              <col style={{ width: '11.25%' }} />
-              <col style={{ width: '11.25%' }} />
-              <col style={{ width: '11.25%' }} />
-              <col style={{ width: '11.25%' }} />
+              <col style={{ width: '9%' }} />
+              <col style={{ width: '11.375%' }} />
+              <col style={{ width: '11.375%' }} />
+              <col style={{ width: '11.375%' }} />
+              <col style={{ width: '11.375%' }} />
+              <col style={{ width: '11.375%' }} />
+              <col style={{ width: '11.375%' }} />
+              <col style={{ width: '11.375%' }} />
+              <col style={{ width: '11.375%' }} />
             </colgroup>
             <thead>
               <tr className="bg-slate-100 border-b-2 border-slate-900 text-[11px] font-bold text-slate-800">
-                <th className="p-2 border-r-2 border-slate-900">DAY \ TIME</th>
+                <th className="p-1.5 border-r-2 border-slate-900 font-extrabold uppercase text-[10px]">
+                  DAY \ TIME
+                </th>
                 {TIME_SLOTS.map((slot) => (
-                  <th key={slot.id} className="p-1.5 border-r border-slate-300 last:border-r-0 truncate">
-                    <div className="font-mono font-bold text-[10px]">{slot.shortLabel}</div>
-                    <div className="text-[8px] text-slate-500 font-normal truncate">
+                  <th key={slot.id} className="p-1 border-r border-slate-300 last:border-r-0">
+                    <div className="font-mono font-bold text-[10px] text-slate-900 leading-tight">
+                      {slot.shortLabel}
+                    </div>
+                    <div className="text-[8px] text-slate-500 font-normal leading-tight">
                       {slot.start} - {slot.end}
                     </div>
                   </th>
@@ -142,13 +174,13 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
             </thead>
             <tbody>
               {DAYS.map((day) => (
-                <tr key={day} className="border-b border-slate-300 last:border-b-0 h-16">
+                <tr key={day} className="border-b border-slate-300 last:border-b-0 min-h-[56px]">
                   {/* Day Column */}
-                  <td className="p-2 bg-slate-50 border-r-2 border-slate-900 font-bold font-mono text-xs uppercase text-slate-900">
+                  <td className="p-1.5 bg-slate-50 border-r-2 border-slate-900 font-bold font-mono text-xs uppercase text-slate-900">
                     {day}
                   </td>
 
-                  {/* Slots */}
+                  {/* 8 Slots */}
                   {TIME_SLOTS.map((slot) => {
                     const assignment = getAssignmentAt(day, slot.id);
                     const isCovered = isSlotCoveredByPreviousLab(day, slot.id);
@@ -173,32 +205,43 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
                           colSpan={isLab ? 2 : 1}
                           title={`${subj?.name} (${subj?.code}) | Faculty: ${fac?.name || 'Faculty'} | Venue: ${venueDisplay}`}
                           className={cn(
-                            'p-1.5 border-r border-slate-300 last:border-r-0 align-middle overflow-hidden',
-                            isLab ? 'bg-pink-50/70 font-semibold' : 'bg-indigo-50/60'
+                            'p-1 border-r border-slate-300 last:border-r-0 align-middle',
+                            isLab
+                              ? 'bg-rose-50/85 border-rose-200 text-slate-900'
+                              : 'bg-indigo-50/75 border-indigo-100 text-slate-900'
                           )}
                         >
-                          <div className="flex flex-col items-center justify-center gap-0.5 min-w-0 overflow-hidden font-mono">
-                            {/* Subject Initials */}
-                            <div className="text-xs font-black text-slate-900 tracking-wider truncate max-w-full">
-                              {subjectInitials}
+                          <div className="flex flex-col items-center justify-center gap-1 font-mono py-1">
+                            {/* Subject Initials + 2h tag if Lab */}
+                            <div className="flex items-center justify-center gap-1.5 text-[11px] font-black text-slate-900 leading-none">
+                              <span>{subjectInitials}</span>
                               {isLab && (
-                                <span className="ml-1 text-[8px] uppercase px-1 py-0.2 rounded bg-pink-200 text-pink-900 font-extrabold">
-                                  2h
+                                <span className="text-[7.5px] uppercase px-1 py-0.5 rounded bg-rose-200 text-rose-950 font-extrabold border border-rose-300/80 leading-none">
+                                  2h Lab
                                 </span>
                               )}
                             </div>
 
-                            {/* Faculty Initials + Room No */}
-                            <div className="flex items-center justify-center gap-1 text-[10px] text-slate-800 font-bold truncate max-w-full">
-                              <span className="text-indigo-900">{facultyInitials}</span>
-                              <span className="text-slate-400">•</span>
-                              <span className="text-slate-600">{venueDisplay}</span>
+                            {/* Faculty Initials Badge + Room No */}
+                            <div className="flex items-center justify-center gap-1.5 text-[9.5px] text-slate-800 font-mono leading-none">
+                              <span className="inline-flex items-center justify-center px-1.5 py-0.5 rounded bg-white text-indigo-950 font-bold border border-slate-300 shadow-xs text-[9px] leading-none">
+                                {facultyInitials}
+                              </span>
+                              <span className="text-slate-400 font-normal leading-none">•</span>
+                              <span className="text-slate-800 font-bold leading-none">{venueDisplay}</span>
                             </div>
 
                             {/* Attending class if not UG mode */}
                             {mode !== 'ug' && cls?.name && (
-                              <div className="text-[9px] text-slate-500 truncate max-w-full">
+                              <div className="text-[8.5px] text-slate-600 font-medium leading-none">
                                 {cls.name.split(' ')[0]}
+                              </div>
+                            )}
+
+                            {/* Subject Code (Compact) */}
+                            {mode === 'ug' && subj?.code && (
+                              <div className="text-[8px] text-slate-500 font-medium leading-none">
+                                {subj.code}
                               </div>
                             )}
                           </div>
@@ -210,7 +253,7 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
                       <td
                         key={`${day}-${slot.id}`}
                         colSpan={1}
-                        className="p-1 border-r border-slate-300 last:border-r-0 text-slate-300 text-[10px] font-mono"
+                        className="p-1 border-r border-slate-300 last:border-r-0 text-slate-300 text-[10px] font-mono select-none"
                       >
                         —
                       </td>
@@ -222,60 +265,154 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
           </table>
         </div>
 
-        {/* Legend & Workload Summary */}
-        <div className="grid grid-cols-3 gap-4 border border-slate-300 rounded-lg p-3 bg-slate-50/60 mb-6 text-[10px]">
-          <div className="col-span-2 space-y-1.5">
-            <span className="font-bold text-slate-800 uppercase tracking-wider">
-              Subject & Faculty Reference Index:
-            </span>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-1">
-              {legendSubjects.map((s) => (
-                <div key={s.id} className="flex items-center gap-1.5 truncate">
-                  <span className="font-mono font-black text-slate-900 bg-white px-1.5 py-0.5 rounded border border-slate-300 shrink-0">
-                    {getSubjectInitials(s)}
-                  </span>
-                  <span className="truncate text-slate-700 font-medium">
-                    {s.name} ({s.code})
-                  </span>
+        {/* Full Faculty & Subject Reference Key Matrix (No scrollbars, fully expanded) */}
+        <div className="border-2 border-slate-900 rounded-lg overflow-hidden mb-3.5 bg-slate-50/70">
+          <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-300">
+            {/* Left Column: Subject Reference Matrix Table */}
+            <div className="p-2.5">
+              <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-300">
+                <div className="flex items-center gap-1.5 font-extrabold text-slate-900 uppercase tracking-wider text-[10px]">
+                  <BookOpen className="w-3.5 h-3.5 text-indigo-700" />
+                  <span>Subject Reference Matrix</span>
                 </div>
-              ))}
+                <span className="text-[9px] font-mono text-slate-500">
+                  {displaySubjects.length} Courses
+                </span>
+              </div>
+
+              <table className="w-full text-[9px] text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-300 text-slate-600 font-bold uppercase text-[8px]">
+                    <th className="pb-1 w-12 font-mono">Abbr</th>
+                    <th className="pb-1 w-16 font-mono">Code</th>
+                    <th className="pb-1">Subject Title</th>
+                    <th className="pb-1 w-16 text-center">Type</th>
+                    <th className="pb-1 w-10 text-center font-mono">Fac</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {displaySubjects.map((s) => {
+                    const isLab = s.type === 'lab' || s.name.toLowerCase().includes('lab');
+                    const facInitial = getFacultyForSubject(s.id);
+                    return (
+                      <tr key={s.id} className="py-0.5">
+                        <td className="py-1 font-mono font-black text-slate-900">
+                          [{getSubjectInitials(s)}]
+                        </td>
+                        <td className="py-1 font-mono font-semibold text-slate-600">
+                          {s.code}
+                        </td>
+                        <td className="py-1 font-semibold text-slate-800 truncate max-w-[150px]">
+                          {s.name}
+                        </td>
+                        <td className="py-1 text-center">
+                          <span
+                            className={cn(
+                              'px-1 py-0.2 rounded text-[7.5px] font-mono font-bold uppercase',
+                              isLab ? 'bg-rose-100 text-rose-800 border border-rose-200' : 'bg-slate-200 text-slate-700'
+                            )}
+                          >
+                            {isLab ? 'Lab 2h' : 'Lecture'}
+                          </span>
+                        </td>
+                        <td className="py-1 text-center font-mono font-bold text-indigo-900">
+                          {facInitial}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Right Column: Faculty Reference & Short Form Directory Table */}
+            <div className="p-2.5">
+              <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-300">
+                <div className="flex items-center gap-1.5 font-extrabold text-slate-900 uppercase tracking-wider text-[10px]">
+                  <UserCheck className="w-3.5 h-3.5 text-indigo-700" />
+                  <span>Faculty Reference & Short Form Key</span>
+                </div>
+                <span className="text-[9px] font-mono text-slate-500">
+                  {displayFaculty.length} Faculty Members
+                </span>
+              </div>
+
+              <table className="w-full text-[9px] text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-300 text-slate-600 font-bold uppercase text-[8px]">
+                    <th className="pb-1 w-12 font-mono">Abbr</th>
+                    <th className="pb-1">Faculty Name</th>
+                    <th className="pb-1">Designation</th>
+                    <th className="pb-1 w-14 text-right font-mono">Schedule</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {displayFaculty.map((f) => {
+                    const initials = getFacultyInitials(f.name);
+                    const scheduleLoad = facultyScheduleHours.get(f.id) || 0;
+                    return (
+                      <tr key={f.id} className="py-0.5">
+                        <td className="py-1 font-mono font-black text-indigo-900">
+                          [{initials}]
+                        </td>
+                        <td className="py-1 font-bold text-slate-900 truncate max-w-[140px]">
+                          {f.name}
+                        </td>
+                        <td className="py-1 text-slate-600 text-[8.5px] truncate max-w-[120px]">
+                          {f.designation}
+                        </td>
+                        <td className="py-1 text-right font-mono font-bold">
+                          {scheduleLoad > 0 ? (
+                            <span className="bg-indigo-100 text-indigo-800 px-1 py-0.2 rounded text-[8px]">
+                              {scheduleLoad} hrs
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 font-normal text-[8px]">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
 
-          <div className="border-l border-slate-300 pl-3 flex flex-col justify-between">
-            <div>
-              <span className="font-bold text-slate-800 uppercase tracking-wider block">
-                Workload Metrics
+          {/* Workload & Summary Metrics Footer Bar */}
+          <div className="bg-slate-100 border-t border-slate-300 px-3 py-1.5 flex flex-wrap items-center justify-between text-[9px] font-mono text-slate-700 gap-2">
+            <div className="flex items-center gap-4">
+              <span>
+                Total Weekly Load: <strong className="text-slate-900">{totalWeeklyHours} hrs</strong>
               </span>
-              <div className="mt-1 space-y-0.5 font-mono text-slate-700">
-                <div>Total Weekly Hours: <strong className="text-slate-900">{totalWeeklyHours} hrs</strong></div>
-                <div>Teaching Days: <strong>Monday — Saturday</strong></div>
-              </div>
+              <span>•</span>
+              <span>Lectures: <strong>{totalLectures} ({totalLectures}h)</strong></span>
+              <span>•</span>
+              <span>Lab Blocks: <strong>{totalLabBlocks} ({totalLabBlocks * 2}h)</strong></span>
             </div>
-            <div className="text-[9px] text-slate-500 font-mono">
-              Generated: {new Date().toLocaleDateString('en-US', { dateStyle: 'medium' })}
+            <div className="text-slate-500 text-[8.5px]">
+              Yeshwantrao Chavan College of Engineering • Effective {INSTITUTION_INFO.effectiveDate}
             </div>
           </div>
         </div>
 
         {/* Official Institutional Signatures */}
-        <div className="pt-8 grid grid-cols-3 text-center border-t border-slate-300 text-xs font-semibold text-slate-800">
-          <div>
-            <div className="h-9 border-b border-dashed border-slate-400 mb-1.5" />
-            <span>{INSTITUTION_INFO.coordinatorName}</span>
-            <span className="block text-[10px] text-slate-500 font-normal">Timetable Coordinator</span>
+        <div className="pt-4 grid grid-cols-3 text-center border-t-2 border-slate-900 text-xs font-semibold text-slate-900">
+          <div className="px-2">
+            <div className="h-7 border-b border-dashed border-slate-400 mb-1" />
+            <span className="font-bold text-[11px]">{INSTITUTION_INFO.coordinatorName}</span>
+            <span className="block text-[9px] text-slate-600 font-normal">Timetable Coordinator</span>
           </div>
 
-          <div>
-            <div className="h-9 border-b border-dashed border-slate-400 mb-1.5" />
-            <span>{INSTITUTION_INFO.hodName}</span>
-            <span className="block text-[10px] text-slate-500 font-normal">Head of Department</span>
+          <div className="px-2">
+            <div className="h-7 border-b border-dashed border-slate-400 mb-1" />
+            <span className="font-bold text-[11px]">{INSTITUTION_INFO.hodName}</span>
+            <span className="block text-[9px] text-slate-600 font-normal">Head of Department</span>
           </div>
 
-          <div>
-            <div className="h-9 border-b border-dashed border-slate-400 mb-1.5" />
-            <span>{INSTITUTION_INFO.deanName}</span>
-            <span className="block text-[10px] text-slate-500 font-normal">Dean of Academic Affairs</span>
+          <div className="px-2">
+            <div className="h-7 border-b border-dashed border-slate-400 mb-1" />
+            <span className="font-bold text-[11px]">{INSTITUTION_INFO.deanName}</span>
+            <span className="block text-[9px] text-slate-600 font-normal">Dean of Academic Affairs</span>
           </div>
         </div>
       </div>

@@ -82,19 +82,37 @@ h1, h2, h3, h4, .font-heading {
   background-size: 10px 10px;
 }
 
-/* Print Optimization */
+/* Print Optimization - Isolates ONLY the Timetable Sheet with Zero Clipping */
 @media print {
-  body {
-    background: #FFFFFF !important;
-    color: #000000 !important;
+  @page {
+    size: landscape;
+    margin: 10mm 12mm;
   }
 
-  .no-print {
+  html, body {
+    background: #FFFFFF !important;
+    color: #000000 !important;
+    font-size: 11px !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Completely hide navigation, controls, headers, buttons */
+  .no-print, header, nav, footer, button, select {
     display: none !important;
   }
 
-  .print-only {
-    display: block !important;
+  /* Reset main and outer wrappers so they do not add padding or constrain width */
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    overflow: visible !important;
   }
 
   .printable-area {
@@ -102,10 +120,21 @@ h1, h2, h3, h4, .font-heading {
     margin: 0 !important;
     box-shadow: none !important;
     border: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow: visible !important;
   }
 
-  @page {
-    size: landscape;
-    margin: 10mm;
+  table {
+    width: 100% !important;
+    table-layout: fixed !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
 }
+

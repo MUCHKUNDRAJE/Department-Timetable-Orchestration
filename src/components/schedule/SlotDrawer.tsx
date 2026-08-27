@@ -28,6 +28,9 @@ import {
 import {
   checkAssignmentConflict,
   getFacultyAvailabilityForSlot,
+  getRoomAvailabilityForSlot,
+  getLabAvailabilityForSlot,
+  getClassAvailabilityForSlot,
 } from '@/lib/conflict-checker';
 import { TargetType } from '@/types/timetable';
 
@@ -83,10 +86,43 @@ export function SlotDrawer() {
     setDuration(defaultDur);
     setFacultyId('');
     setSubjectId('');
-    setRoomId(rooms[0]?.id || '');
-    setLabId(labs[0]?.id || '');
-    setClassId(classes[0]?.id || '');
-  }, [isOpen, assignmentId, assignments, selectedTargetType, rooms, labs, classes]);
+
+    // Pick first available room if any, else default to first
+    const freeRoom = rooms.find((r) => {
+      return !assignments.some(
+        (a) =>
+          a.day === day &&
+          ((a.targetType === 'room' && a.targetId === r.id) || a.roomId === r.id) &&
+          ((startSlot >= a.startSlot && startSlot < a.startSlot + a.duration) ||
+            (startSlot + defaultDur > a.startSlot && startSlot + defaultDur <= a.startSlot + a.duration))
+      );
+    });
+    setRoomId(freeRoom?.id || rooms[0]?.id || '');
+
+    // Pick first available lab if any
+    const freeLab = labs.find((l) => {
+      return !assignments.some(
+        (a) =>
+          a.day === day &&
+          ((a.targetType === 'lab' && a.targetId === l.id) || a.labId === l.id) &&
+          ((startSlot >= a.startSlot && startSlot < a.startSlot + a.duration) ||
+            (startSlot + defaultDur > a.startSlot && startSlot + defaultDur <= a.startSlot + a.duration))
+      );
+    });
+    setLabId(freeLab?.id || labs[0]?.id || '');
+
+    // Pick first available class if any
+    const freeClass = classes.find((c) => {
+      return !assignments.some(
+        (a) =>
+          a.day === day &&
+          ((a.targetType === 'class' && a.targetId === c.id) || a.classId === c.id) &&
+          ((startSlot >= a.startSlot && startSlot < a.startSlot + a.duration) ||
+            (startSlot + defaultDur > a.startSlot && startSlot + defaultDur <= a.startSlot + a.duration))
+      );
+    });
+    setClassId(freeClass?.id || classes[0]?.id || '');
+  }, [isOpen, assignmentId, assignments, selectedTargetType, rooms, labs, classes, day, startSlot]);
 
   // Current Target Name
   const currentTargetName = useMemo(() => {
@@ -99,7 +135,7 @@ export function SlotDrawer() {
     return rooms.find((r) => r.id === selectedTargetId)?.name || 'Room';
   }, [selectedTargetType, selectedTargetId, classes, labs, rooms]);
 
-  // Pre-filter faculty availability with allocated hours
+  // Pre-filter faculty availability with allocated hours & conflicts
   const facultyAvailability = useMemo(() => {
     if (!isOpen) return [];
     return getFacultyAvailabilityForSlot(
@@ -115,6 +151,54 @@ export function SlotDrawer() {
       rooms
     );
   }, [isOpen, day, startSlot, duration, assignments, facultyList, assignmentId, subjectList, classes, labs, rooms]);
+
+  // Real-time Room Availability with conflict detection and where-used details
+  const roomAvailability = useMemo(() => {
+    if (!isOpen) return [];
+    return getRoomAvailabilityForSlot(
+      day,
+      startSlot,
+      duration,
+      assignments,
+      rooms,
+      assignmentId,
+      subjectList,
+      classes,
+      facultyList
+    );
+  }, [isOpen, day, startSlot, duration, assignments, rooms, assignmentId, subjectList, classes, facultyList]);
+
+  // Real-time Lab Availability with conflict detection and where-used details
+  const labAvailability = useMemo(() => {
+    if (!isOpen) return [];
+    return getLabAvailabilityForSlot(
+      day,
+      startSlot,
+      duration,
+      assignments,
+      labs,
+      assignmentId,
+      subjectList,
+      classes,
+      facultyList
+    );
+  }, [isOpen, day, startSlot, duration, assignments, labs, assignmentId, subjectList, classes, facultyList]);
+
+  // Real-time Class Availability with conflict detection
+  const classAvailability = useMemo(() => {
+    if (!isOpen) return [];
+    return getClassAvailabilityForSlot(
+      day,
+      startSlot,
+      duration,
+      assignments,
+      classes,
+      assignmentId,
+      subjectList,
+      labs,
+      rooms
+    );
+  }, [isOpen, day, startSlot, duration, assignments, classes, assignmentId, subjectList, labs, rooms]);
 
   // Filter subjects based on chosen faculty
   const availableSubjects = useMemo(() => {
@@ -133,8 +217,13 @@ export function SlotDrawer() {
     } else if (selectedTargetType !== 'lab') {
       setDuration(1);
       // Auto-fill the first available room for lecture subjects when target is class
-      if (selectedTargetType === 'class' && !roomId && rooms.length > 0) {
-        setRoomId(rooms[0].id);
+      if (selectedTargetType === 'class') {
+        const availableRoom = roomAvailability.find((r) => r.isAvailable)?.room;
+        if (availableRoom) {
+          setRoomId(availableRoom.id);
+        } else if (!roomId && rooms.length > 0) {
+          setRoomId(rooms[0].id);
+        }
       }
     }
   };
@@ -318,15 +407,19 @@ export function SlotDrawer() {
             <SelectContent>
               {facultyAvailability.map(({ faculty, isAvailable, allocatedHours, maxHours, conflictReason, conflictDetail }) => (
                 <SelectItem key={faculty.id} value={faculty.id} disabled={!isAvailable}>
-                  <div className="flex flex-col gap-0.5 py-0.5">
+                  <div className="flex flex-col gap-0.5 py-0.5 max-w-full">
                     <div className="flex items-center gap-1.5">
-                      <span className={isAvailable ? 'text-emerald-600' : 'text-rose-500'} aria-hidden>{isAvailable ? '✓' : '✕'}</span>
+                      <span className={isAvailable ? 'text-emerald-600 font-bold' : 'text-rose-500 font-bold'} aria-hidden>
+                        {isAvailable ? '✓' : '✕'}
+                      </span>
                       <span className="font-semibold">{faculty.name}</span>
-                      <span className="text-muted-foreground text-[11px] ml-auto shrink-0">{allocatedHours}/{maxHours}h</span>
+                      <span className="text-muted-foreground text-[11px] ml-auto shrink-0 font-mono">
+                        {allocatedHours}/{maxHours}h
+                      </span>
                     </div>
                     {!isAvailable && (
-                      <div className="text-[11px] text-rose-600 font-medium pl-4">
-                        {conflictReason}{conflictDetail ? ` — ${conflictDetail}` : ''}
+                      <div className="text-[11px] text-rose-600 font-medium pl-4 leading-tight">
+                        Not available at this point — {conflictReason}{conflictDetail ? ` (${conflictDetail})` : ''}
                       </div>
                     )}
                   </div>
@@ -374,18 +467,35 @@ export function SlotDrawer() {
         {selectedTargetType === 'class' && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
             <div>
-              <label className="block text-sm font-bold text-foreground uppercase tracking-wider mb-2">
-                Lecture Room
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-bold text-foreground uppercase tracking-wider">
+                  Lecture Room
+                </label>
+                <span className="text-xs text-muted-foreground">Real-time occupancy check</span>
+              </div>
               <Select value={roomId} onValueChange={(val) => setRoomId(val)}>
                 <SelectTrigger className="w-full text-sm">
                   <SelectValue placeholder="Auto-selected or choose room" />
                 </SelectTrigger>
                 <SelectContent>
-                  {rooms.map((r) => (
-                    <SelectItem key={r.id} value={r.id}>
-                      <span className="font-semibold font-mono">{r.name}</span>
-                      <span className="text-muted-foreground text-xs ml-2">{r.capacity} seats</span>
+                  {roomAvailability.map(({ room, isAvailable, conflictReason, conflictDetail }) => (
+                    <SelectItem key={room.id} value={room.id} disabled={!isAvailable}>
+                      <div className="flex flex-col gap-0.5 py-0.5 max-w-full">
+                        <div className="flex items-center gap-1.5">
+                          <span className={isAvailable ? 'text-emerald-600 font-bold' : 'text-rose-500 font-bold'} aria-hidden>
+                            {isAvailable ? '✓' : '✕'}
+                          </span>
+                          <span className="font-semibold font-mono">{room.name}</span>
+                          <span className="text-muted-foreground text-xs ml-auto shrink-0 font-mono">
+                            {room.capacity} seats
+                          </span>
+                        </div>
+                        {!isAvailable && (
+                          <div className="text-[11px] text-rose-600 font-medium pl-4 leading-tight">
+                            Not available at this point — {conflictReason}{conflictDetail ? ` (${conflictDetail})` : ''}
+                          </div>
+                        )}
+                      </div>
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -394,18 +504,35 @@ export function SlotDrawer() {
 
             {duration === 2 && (
               <div>
-                <label className="block text-sm font-bold text-foreground uppercase tracking-wider mb-2">
-                  Lab Facility
-                </label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-bold text-foreground uppercase tracking-wider">
+                    Lab Facility
+                  </label>
+                  <span className="text-xs text-muted-foreground">Real-time lab status</span>
+                </div>
                 <Select value={labId} onValueChange={(val) => setLabId(val)}>
                   <SelectTrigger className="w-full text-sm">
                     <SelectValue placeholder="Select Lab" />
                   </SelectTrigger>
                   <SelectContent>
-                    {labs.map((l) => (
-                      <SelectItem key={l.id} value={l.id}>
-                        <span className="font-semibold">{l.name}</span>
-                        <span className="text-muted-foreground text-xs ml-2">{l.capacity} cap</span>
+                    {labAvailability.map(({ lab, isAvailable, conflictReason, conflictDetail }) => (
+                      <SelectItem key={lab.id} value={lab.id} disabled={!isAvailable}>
+                        <div className="flex flex-col gap-0.5 py-0.5 max-w-full">
+                          <div className="flex items-center gap-1.5">
+                            <span className={isAvailable ? 'text-emerald-600 font-bold' : 'text-rose-500 font-bold'} aria-hidden>
+                              {isAvailable ? '✓' : '✕'}
+                            </span>
+                            <span className="font-semibold">{lab.name}</span>
+                            <span className="text-muted-foreground text-xs ml-auto shrink-0 font-mono">
+                              {lab.capacity} cap
+                            </span>
+                          </div>
+                          {!isAvailable && (
+                            <div className="text-[11px] text-rose-600 font-medium pl-4 leading-tight">
+                              Not available at this point — {conflictReason}{conflictDetail ? ` (${conflictDetail})` : ''}
+                            </div>
+                          )}
+                        </div>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -418,18 +545,35 @@ export function SlotDrawer() {
         {/* If target is Lab/Room, which Class is attending */}
         {selectedTargetType !== 'class' && (
           <div>
-            <label className="block text-sm font-bold text-foreground uppercase tracking-wider mb-2">
-              Attending Student Group / Class *
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-bold text-foreground uppercase tracking-wider">
+                Attending Student Group / Class *
+              </label>
+              <span className="text-xs text-muted-foreground">Class schedule check</span>
+            </div>
             <Select value={classId} onValueChange={(val) => setClassId(val)}>
               <SelectTrigger className="w-full text-sm">
                 <SelectValue placeholder="Select Attending Class" />
               </SelectTrigger>
               <SelectContent>
-                {classes.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    <span className="font-semibold">{c.name}</span>
-                    <span className="text-muted-foreground text-xs ml-2">Sem {c.semester} · Sec {c.section}</span>
+                {classAvailability.map(({ collegeClass: c, isAvailable, conflictReason, conflictDetail }) => (
+                  <SelectItem key={c.id} value={c.id} disabled={!isAvailable}>
+                    <div className="flex flex-col gap-0.5 py-0.5 max-w-full">
+                      <div className="flex items-center gap-1.5">
+                        <span className={isAvailable ? 'text-emerald-600 font-bold' : 'text-rose-500 font-bold'} aria-hidden>
+                          {isAvailable ? '✓' : '✕'}
+                        </span>
+                        <span className="font-semibold">{c.name}</span>
+                        <span className="text-muted-foreground text-xs ml-auto shrink-0">
+                          Sem {c.semester} · Sec {c.section}
+                        </span>
+                      </div>
+                      {!isAvailable && (
+                        <div className="text-[11px] text-rose-600 font-medium pl-4 leading-tight">
+                          Not available at this point — {conflictReason}{conflictDetail ? ` (${conflictDetail})` : ''}
+                        </div>
+                      )}
+                    </div>
                   </SelectItem>
                 ))}
               </SelectContent>
