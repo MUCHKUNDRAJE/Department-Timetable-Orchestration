@@ -474,7 +474,7 @@ export function SlotDrawer() {
                 <span className="text-xs text-muted-foreground">Real-time occupancy check</span>
               </div>
               <Select value={roomId} onValueChange={(val) => setRoomId(val)}>
-                <SelectTrigger className="w-full text-sm">
+                <SelectTrigger className="w-fit text-sm whitespace-nowrap">
                   <SelectValue placeholder="Auto-selected or choose room" />
                 </SelectTrigger>
                 <SelectContent>

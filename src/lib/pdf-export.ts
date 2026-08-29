@@ -1,9 +1,63 @@
 import jsPDF from 'jspdf';
 import { toPng } from 'html-to-image';
 
+const CAPTURE_WIDTH = 1200; // Fixed render width — matches the sheet max-w-[1200px]
+
 /**
- * High-fidelity Snapshot-based PDF Exporter using browser-native SVG foreignObject engine (html-to-image).
- * Captures pixel-perfect typography, badges, and tables without canvas clipping or font misalignments.
+ * Creates an off-screen clone of the element at a fixed pixel width so that
+ * html-to-image always has stable, accurate scrollWidth/scrollHeight to capture.
+ * Prevents clipping caused by the live element being inside a constrained container.
+ */
+async function captureElement(element: HTMLElement): Promise<{ dataUrl: string; w: number; h: number }> {
+  const container = document.createElement('div');
+  container.style.cssText = [
+    'position:fixed',
+    'top:-99999px',
+    'left:-99999px',
+    `width:${CAPTURE_WIDTH}px`,
+    'background:#ffffff',
+    'z-index:-1',
+    'pointer-events:none',
+  ].join(';');
+
+  const clone = element.cloneNode(true) as HTMLElement;
+  clone.style.maxWidth = `${CAPTURE_WIDTH}px`;
+  clone.style.width = `${CAPTURE_WIDTH}px`;
+  clone.style.margin = '0';
+  clone.style.borderRadius = '0';
+  clone.style.border = 'none';
+  clone.style.boxShadow = 'none';
+  container.appendChild(clone);
+  document.body.appendChild(container);
+
+  // Allow layout to settle
+  await new Promise((r) => setTimeout(r, 180));
+
+  const w = clone.scrollWidth || CAPTURE_WIDTH;
+  const h = clone.scrollHeight;
+
+  if (typeof document !== 'undefined' && document.fonts) {
+    await document.fonts.ready;
+  }
+
+  const dataUrl = await toPng(clone, {
+    quality: 1.0,
+    pixelRatio: 2,
+    backgroundColor: '#ffffff',
+    cacheBust: true,
+    canvasWidth: w,
+    canvasHeight: h,
+    width: w,
+    height: h,
+  });
+
+  document.body.removeChild(container);
+  return { dataUrl, w, h };
+}
+
+/**
+ * High-fidelity Snapshot-based PDF Exporter.
+ * Supports multi-page output when content is taller than a single A4 landscape page.
  */
 export async function exportElementToPdf(
   element: HTMLElement,
@@ -11,61 +65,36 @@ export async function exportElementToPdf(
   orientation: 'landscape' | 'portrait' = 'landscape'
 ) {
   try {
-    if (typeof document !== 'undefined' && document.fonts) {
-      await document.fonts.ready;
-    }
+    const { dataUrl, w, h } = await captureElement(element);
 
-    // Measure full content dimensions (including content wider than viewport)
-    const fullWidth = element.scrollWidth;
-    const fullHeight = element.scrollHeight;
-
-    // Capture direct snapshot using browser-native SVG rendering engine.
-    // Explicitly set canvasWidth/canvasHeight to scrollWidth/scrollHeight
-    // so html-to-image never clips the right or bottom edge.
-    const imgData = await toPng(element, {
-      quality: 1.0,
-      pixelRatio: 2,
-      backgroundColor: '#ffffff',
-      cacheBust: true,
-      canvasWidth: fullWidth,
-      canvasHeight: fullHeight,
-      width: fullWidth,
-      height: fullHeight,
-    });
-
-    const pdf = new jsPDF({
-      orientation,
-      unit: 'mm',
-      format: 'a4',
-    });
-
+    const pdf = new jsPDF({ orientation, unit: 'mm', format: 'a4' });
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-
-    // Create an Image element to get exact natural dimensions
-    const img = new Image();
-    img.src = imgData;
-    await new Promise((resolve) => {
-      img.onload = resolve;
-    });
-
     const margin = 10;
     const availableWidth = pageWidth - margin * 2;
     const availableHeight = pageHeight - margin * 2;
 
-    // Scale to fit width; if too tall, scale to fit height instead
-    let imgWidth = availableWidth;
-    let imgHeight = (img.height * imgWidth) / img.width;
+    const scale = availableWidth / w;
+    const scaledTotalHeight = h * scale;
+    const totalPages = Math.ceil(scaledTotalHeight / availableHeight);
 
-    if (imgHeight > availableHeight) {
-      imgHeight = availableHeight;
-      imgWidth = (img.width * imgHeight) / img.height;
+    for (let page = 0; page < totalPages; page++) {
+      if (page > 0) pdf.addPage();
+
+      // Render full image shifted up so this page's slice is at the top
+      pdf.addImage(
+        dataUrl, 'PNG',
+        margin, margin - page * availableHeight,
+        availableWidth, scaledTotalHeight,
+        undefined, 'FAST'
+      );
+
+      // White mask strips to clip content outside this page's visible slice
+      pdf.setFillColor(255, 255, 255);
+      pdf.rect(0, 0, pageWidth, margin, 'F');
+      pdf.rect(0, pageHeight - margin, pageWidth, margin, 'F');
     }
 
-    const xPos = margin + (availableWidth - imgWidth) / 2;
-    const yPos = margin + (availableHeight - imgHeight) / 2;
-
-    pdf.addImage(imgData, 'PNG', xPos, yPos, imgWidth, imgHeight);
     pdf.save(`${filename}.pdf`);
     return true;
   } catch (error) {
@@ -75,7 +104,7 @@ export async function exportElementToPdf(
 }
 
 /**
- * Bulk Multi-page PDF Snapshot Exporter
+ * Bulk Multi-page PDF Snapshot Exporter — each entity gets its own page(s).
  */
 export async function exportMultipleElementsToPdf(
   elements: { element: HTMLElement; title: string }[],
@@ -83,16 +112,7 @@ export async function exportMultipleElementsToPdf(
   orientation: 'landscape' | 'portrait' = 'landscape'
 ) {
   try {
-    if (typeof document !== 'undefined' && document.fonts) {
-      await document.fonts.ready;
-    }
-
-    const pdf = new jsPDF({
-      orientation,
-      unit: 'mm',
-      format: 'a4',
-    });
-
+    const pdf = new jsPDF({ orientation, unit: 'mm', format: 'a4' });
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
     const margin = 8;
@@ -101,41 +121,28 @@ export async function exportMultipleElementsToPdf(
 
     for (let i = 0; i < elements.length; i++) {
       const { element } = elements[i];
-      if (i > 0) {
-        pdf.addPage();
+      if (i > 0) pdf.addPage();
+
+      const { dataUrl, w, h } = await captureElement(element);
+
+      const scale = availableWidth / w;
+      const scaledTotalHeight = h * scale;
+      const totalPages = Math.ceil(scaledTotalHeight / availableHeight);
+
+      for (let page = 0; page < totalPages; page++) {
+        if (page > 0) pdf.addPage();
+
+        pdf.addImage(
+          dataUrl, 'PNG',
+          margin, margin - page * availableHeight,
+          availableWidth, scaledTotalHeight,
+          undefined, 'FAST'
+        );
+
+        pdf.setFillColor(255, 255, 255);
+        pdf.rect(0, 0, pageWidth, margin, 'F');
+        pdf.rect(0, pageHeight - margin, pageWidth, margin, 'F');
       }
-
-      const fullWidth = element.scrollWidth;
-      const fullHeight = element.scrollHeight;
-
-      const imgData = await toPng(element, {
-        quality: 1.0,
-        pixelRatio: 2,
-        backgroundColor: '#ffffff',
-        cacheBust: true,
-        canvasWidth: fullWidth,
-        canvasHeight: fullHeight,
-        width: fullWidth,
-        height: fullHeight,
-      });
-
-      const img = new Image();
-      img.src = imgData;
-      await new Promise((resolve) => {
-        img.onload = resolve;
-      });
-
-      let imgWidth = availableWidth;
-      let imgHeight = (img.height * imgWidth) / img.width;
-      if (imgHeight > availableHeight) {
-        imgHeight = availableHeight;
-        imgWidth = (img.width * imgHeight) / img.height;
-      }
-
-      const xPos = margin + (availableWidth - imgWidth) / 2;
-      const yPos = margin + (availableHeight - imgHeight) / 2;
-
-      pdf.addImage(imgData, 'PNG', xPos, yPos, imgWidth, imgHeight);
     }
 
     pdf.save(`${filename}.pdf`);
@@ -147,17 +154,21 @@ export async function exportMultipleElementsToPdf(
 }
 
 /**
- * Isolated high-fidelity direct browser print using a hidden iframe
+ * Isolated high-fidelity direct browser print using a hidden iframe.
  */
 export function printElementDirectly(element: HTMLElement) {
   try {
     const printFrame = document.createElement('iframe');
-    printFrame.style.position = 'fixed';
-    printFrame.style.top = '-99999px';
-    printFrame.style.left = '-99999px';
-    printFrame.style.width = '0';
-    printFrame.style.height = '0';
-    printFrame.style.border = 'none';
+    // Must be non-zero width so content lays out correctly before printing
+    printFrame.style.cssText = [
+      'position:fixed',
+      'top:-99999px',
+      'left:-99999px',
+      'width:1200px',
+      'height:900px',
+      'border:none',
+      'visibility:hidden',
+    ].join(';');
 
     document.body.appendChild(printFrame);
 
@@ -167,53 +178,29 @@ export function printElementDirectly(element: HTMLElement) {
       return;
     }
 
-    // Collect all stylesheet links and style tags from current document
     const headStyles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
       .map((node) => node.outerHTML)
       .join('\n');
 
     doc.open();
-    doc.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Timetable Print - Yeshwantrao Chavan College of Engineering</title>
-          ${headStyles}
-          <style>
-            @page {
-              size: landscape;
-              margin: 10mm 12mm;
-            }
-            body {
-              background: #ffffff !important;
-              color: #000000 !important;
-              margin: 0 !important;
-              padding: 0 !important;
-              -webkit-print-color-adjust: exact !important;
-              print-color-adjust: exact !important;
-            }
-            .print-sheet-root {
-              width: 100% !important;
-              max-width: 100% !important;
-              margin: 0 !important;
-              padding: 4mm 6mm !important;
-              box-sizing: border-box !important;
-              border: none !important;
-              box-shadow: none !important;
-            }
-            table {
-              width: 100% !important;
-              table-layout: fixed !important;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="print-sheet-root">
-            ${element.outerHTML}
-          </div>
-        </body>
-      </html>
-    `);
+    doc.write(`<!DOCTYPE html>
+<html>
+  <head>
+    <title>Timetable Print</title>
+    ${headStyles}
+    <style>
+      @page { size: A4 landscape; margin: 10mm 12mm; }
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; box-sizing: border-box !important; }
+      html, body { width: 100% !important; background: #ffffff !important; color: #000 !important; margin: 0 !important; padding: 0 !important; }
+      .print-sheet-root { width: 100% !important; max-width: 100% !important; margin: 0 auto !important; padding: 4mm 6mm !important; border: none !important; box-shadow: none !important; border-radius: 0 !important; }
+      table { width: 100% !important; table-layout: fixed !important; page-break-inside: avoid !important; }
+      img { max-width: 100% !important; }
+    </style>
+  </head>
+  <body>
+    <div class="print-sheet-root">${element.outerHTML}</div>
+  </body>
+</html>`);
     doc.close();
 
     printFrame.contentWindow?.focus();
@@ -223,8 +210,8 @@ export function printElementDirectly(element: HTMLElement) {
         if (document.body.contains(printFrame)) {
           document.body.removeChild(printFrame);
         }
-      }, 2000);
-    }, 500);
+      }, 3000);
+    }, 800);
   } catch (err) {
     console.warn('Iframe print fallback to window.print', err);
     window.print();

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { forwardRef } from 'react';
+import Image from 'next/image';
 import { INSTITUTION_INFO, DAYS, TIME_SLOTS } from '@/lib/constants';
 import { CollegeClass, Lab, Room, Faculty, Subject, Assignment, PrintMode, Day } from '@/types/timetable';
 import { Building2, UserCheck, BookOpen, Clock, CalendarDays } from 'lucide-react';
@@ -116,8 +117,8 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
         {/* Official Institutional Header */}
         <div className="border-b-2 border-slate-900 pb-3 mb-3.5 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3.5 min-w-0">
-            <div className="w-12 h-12 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold shrink-0">
-              <Building2 className="w-6 h-6 text-white" />
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center font-bold shrink-0">
+               <Image src="/image.png" alt="Logo" width={48} height={48} />
             </div>
             <div className="min-w-0">
               <h1 className="text-sm sm:text-base font-extrabold tracking-wider uppercase text-slate-900 leading-tight truncate">
