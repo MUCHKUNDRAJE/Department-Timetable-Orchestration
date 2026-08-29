@@ -493,6 +493,11 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
             <span className="block text-[9px] text-slate-600 font-normal">Dean of Academic Affairs</span>
           </div>
         </div>
+
+        {/* Watermark Footer */}
+        <div className="pt-3 text-center text-[8.5px] text-slate-400 font-mono select-none border-t border-slate-200 mt-2">
+          Timetable Allocator • Created by Muchkundraje Thote
+        </div>
       </div>
     );
   }

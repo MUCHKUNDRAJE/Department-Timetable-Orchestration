@@ -27,6 +27,7 @@ import {
   getRoomAvailabilityForSlot,
   getLabAvailabilityForSlot,
   getClassAvailabilityForSlot,
+  calculateFacultyAllocatedHours,
 } from '@/lib/conflict-checker';
 import { LabBatch } from '@/types/timetable';
 
@@ -90,6 +91,8 @@ export function SlotDrawer() {
   const [roomId, setRoomId] = useState('');
   const [labId, setLabId] = useState('');
   const [classId, setClassId] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // 4-Batch state for 2-hour lab sessions (A1, A2, A3, A4) - strictly labs only
   const [batches, setBatches] = useState<Record<BatchKey, BatchData>>({
@@ -111,12 +114,39 @@ export function SlotDrawer() {
     if (assignmentId) {
       const existing = assignments.find((a) => a.id === assignmentId);
       if (existing) {
-        setFacultyId(existing.facultyId);
-        setSubjectId(existing.subjectId);
-        setDuration(existing.duration);
-        setRoomId(existing.roomId || '');
-        setLabId(existing.labId || '');
-        setClassId(existing.classId || '');
+        const targetClass = selectedTargetType === 'class' ? classes.find((c) => c.id === selectedTargetId) : undefined;
+        const targetSemester = targetClass?.semester;
+
+        const lectureSubjects = subjectList.filter(
+          (s) => s.type === 'lecture' && (targetSemester ? s.semester === targetSemester : true)
+        );
+        const finalLectureSubjects = lectureSubjects.length > 0 ? lectureSubjects : subjectList;
+
+        const effectiveFacultyId = existing.facultyId || facultyList[0]?.id || '';
+        const matchingFac = facultyList.find((f) => f.id === effectiveFacultyId);
+        const effectiveSubjectId =
+          existing.subjectId ||
+          finalLectureSubjects.find((s) => matchingFac?.subjectIds?.includes(s.id))?.id ||
+          finalLectureSubjects[0]?.id ||
+          subjectList[0]?.id ||
+          '';
+
+        const freeRoom = rooms.find((r) => {
+          return !assignments.some(
+            (a) =>
+              a.id !== assignmentId &&
+              a.day === day &&
+              ((a.targetType === 'room' && a.targetId === r.id) || a.roomId === r.id) &&
+              Math.max(startSlot, a.startSlot) < Math.min(startSlot + (existing.duration || 1), a.startSlot + a.duration)
+          );
+        });
+
+        setFacultyId(effectiveFacultyId);
+        setSubjectId(effectiveSubjectId);
+        setDuration(existing.duration || 1);
+        setRoomId(existing.roomId || freeRoom?.id || rooms[0]?.id || '');
+        setLabId(existing.labId || labs[0]?.id || '');
+        setClassId(existing.classId || classes[0]?.id || '');
 
         if (existing.labBatches && existing.labBatches.length > 0) {
           const loadedBatches: Record<BatchKey, BatchData> = {
@@ -128,24 +158,23 @@ export function SlotDrawer() {
           existing.labBatches.forEach((b) => {
             if (b.id in loadedBatches) {
               loadedBatches[b.id as BatchKey] = {
-                facultyId: b.facultyId || '',
-                subjectId: b.subjectId || '',
-                labId: b.labId || '',
+                facultyId: b.facultyId || effectiveFacultyId,
+                subjectId: b.subjectId || effectiveSubjectId,
+                labId: b.labId || labs[0]?.id || '',
               };
             }
           });
           setBatches(loadedBatches);
         } else {
-          // Legacy single-faculty lab mapped to A1
           setBatches({
             A1: {
-              facultyId: existing.facultyId || '',
-              subjectId: existing.subjectId || '',
-              labId: existing.labId || '',
+              facultyId: effectiveFacultyId,
+              subjectId: effectiveSubjectId,
+              labId: existing.labId || labs[0]?.id || '',
             },
-            A2: { facultyId: '', subjectId: '', labId: '' },
-            A3: { facultyId: '', subjectId: '', labId: '' },
-            A4: { facultyId: '', subjectId: '', labId: '' },
+            A2: { facultyId: facultyList[1]?.id || effectiveFacultyId, subjectId: effectiveSubjectId, labId: labs[1]?.id || labs[0]?.id || '' },
+            A3: { facultyId: facultyList[2]?.id || effectiveFacultyId, subjectId: effectiveSubjectId, labId: labs[2]?.id || labs[0]?.id || '' },
+            A4: { facultyId: facultyList[3]?.id || effectiveFacultyId, subjectId: effectiveSubjectId, labId: labs[3]?.id || labs[0]?.id || '' },
           });
         }
         return;
@@ -153,60 +182,131 @@ export function SlotDrawer() {
     }
 
     // Default initializations for new slot
-    const defaultDur: 1 | 2 = selectedTargetType === 'lab' ? 2 : 1;
+    const defaultDur: 1 | 2 = activeSlotEditor?.duration || (selectedTargetType === 'lab' ? 2 : 1);
     setDuration(defaultDur);
-    setFacultyId('');
-    setSubjectId('');
 
-    // Pick first available room if any, else default to first
+    const targetClass = selectedTargetType === 'class' ? classes.find((c) => c.id === selectedTargetId) : undefined;
+    const targetSemester = targetClass?.semester;
+
+    // 1. Available Room for 1-Hour Lecture
     const freeRoom = rooms.find((r) => {
       return !assignments.some(
         (a) =>
           a.day === day &&
           ((a.targetType === 'room' && a.targetId === r.id) || a.roomId === r.id) &&
-          ((startSlot >= a.startSlot && startSlot < a.startSlot + a.duration) ||
+          ((startSlot >= a.startSlot && startSlot < a.startSlot + defaultDur) ||
             (startSlot + defaultDur > a.startSlot && startSlot + defaultDur <= a.startSlot + a.duration))
       );
     });
     const defRoomId = freeRoom?.id || rooms[0]?.id || '';
     setRoomId(defRoomId);
 
-    // Pick available labs
+    // 2. Available Labs
     const freeLabs = labs.filter((l) => {
       return !assignments.some(
         (a) =>
           a.day === day &&
           ((a.targetType === 'lab' && a.targetId === l.id) || a.labId === l.id) &&
-          ((startSlot >= a.startSlot && startSlot < a.startSlot + a.duration) ||
+          ((startSlot >= a.startSlot && startSlot < a.startSlot + defaultDur) ||
             (startSlot + defaultDur > a.startSlot && startSlot + defaultDur <= a.startSlot + a.duration))
       );
     });
     const defLabId = freeLabs[0]?.id || labs[0]?.id || '';
     setLabId(defLabId);
 
-    // Pick first available class if any
+    // 3. Available Class (for lab/room target scheduling)
     const freeClass = classes.find((c) => {
       return !assignments.some(
         (a) =>
           a.day === day &&
           ((a.targetType === 'class' && a.targetId === c.id) || a.classId === c.id) &&
-          ((startSlot >= a.startSlot && startSlot < a.startSlot + a.duration) ||
+          ((startSlot >= a.startSlot && startSlot < a.startSlot + defaultDur) ||
             (startSlot + defaultDur > a.startSlot && startSlot + defaultDur <= a.startSlot + a.duration))
       );
     });
     setClassId(freeClass?.id || classes[0]?.id || '');
 
-    // Default batches for lab mode
-    const labSubjects = subjectList.filter((s) => s.type === 'lab');
-    const defaultLabSubj = labSubjects[0]?.id || subjectList[0]?.id || '';
+    // 4. Smart Lecture Faculty & Subject Pre-population
+    const lectureSubjects = subjectList.filter(
+      (s) => s.type === 'lecture' && (targetSemester ? s.semester === targetSemester : true)
+    );
+    const applicableLectureSubjects =
+      lectureSubjects.length > 0 ? lectureSubjects : subjectList.filter((s) => s.type === 'lecture');
+    const finalLectureSubjects = applicableLectureSubjects.length > 0 ? applicableLectureSubjects : subjectList;
 
-    setBatches({
-      A1: { facultyId: '', subjectId: defaultLabSubj, labId: freeLabs[0]?.id || labs[0]?.id || '' },
-      A2: { facultyId: '', subjectId: defaultLabSubj, labId: freeLabs[1]?.id || labs[1]?.id || labs[0]?.id || '' },
-      A3: { facultyId: '', subjectId: defaultLabSubj, labId: freeLabs[2]?.id || labs[2]?.id || labs[0]?.id || '' },
-      A4: { facultyId: '', subjectId: defaultLabSubj, labId: freeLabs[3]?.id || labs[3]?.id || labs[0]?.id || '' },
+    const availableFaculties1hr = facultyList.filter((f) => {
+      const allocated = calculateFacultyAllocatedHours(f.id, assignments, assignmentId);
+      if (allocated + 1 > f.maxWeeklyHours) return false;
+      return !assignments.some(
+        (a) =>
+          a.id !== assignmentId &&
+          a.day === day &&
+          a.facultyId === f.id &&
+          Math.max(startSlot, a.startSlot) < Math.min(startSlot + 1, a.startSlot + a.duration)
+      );
     });
-  }, [isOpen, assignmentId, assignments, selectedTargetType, rooms, labs, classes, day, startSlot, subjectList]);
+
+    const matchingFac =
+      availableFaculties1hr.find((f) =>
+        f.subjectIds.some((sid) => finalLectureSubjects.some((s) => s.id === sid))
+      ) ||
+      availableFaculties1hr[0] ||
+      facultyList[0];
+
+    const matchingSubj =
+      finalLectureSubjects.find((s) => matchingFac?.subjectIds?.includes(s.id)) ||
+      subjectList.find((s) => matchingFac?.subjectIds?.includes(s.id)) ||
+      finalLectureSubjects[0] ||
+      subjectList[0];
+
+    setFacultyId(matchingFac?.id || facultyList[0]?.id || '');
+    setSubjectId(matchingSubj?.id || subjectList[0]?.id || '');
+
+    // 5. Smart 4-Batch Lab Pre-population
+    const labSubjects = subjectList.filter(
+      (s) => s.type === 'lab' && (targetSemester ? s.semester === targetSemester : true)
+    );
+    const applicableLabSubjects =
+      labSubjects.length > 0 ? labSubjects : subjectList.filter((s) => s.type === 'lab');
+    const finalLabSubjects = applicableLabSubjects.length > 0 ? applicableLabSubjects : subjectList;
+
+    const availableFaculties2hr = facultyList.filter((f) => {
+      const allocated = calculateFacultyAllocatedHours(f.id, assignments, assignmentId);
+      if (allocated + 2 > f.maxWeeklyHours) return false;
+      return !assignments.some(
+        (a) =>
+          a.id !== assignmentId &&
+          a.day === day &&
+          a.facultyId === f.id &&
+          Math.max(startSlot, a.startSlot) < Math.min(startSlot + 2, a.startSlot + a.duration)
+      );
+    });
+
+    const populatedBatches: Record<BatchKey, BatchData> = {
+      A1: { facultyId: '', subjectId: '', labId: '' },
+      A2: { facultyId: '', subjectId: '', labId: '' },
+      A3: { facultyId: '', subjectId: '', labId: '' },
+      A4: { facultyId: '', subjectId: '', labId: '' },
+    };
+
+    BATCH_KEYS.forEach((bKey, idx) => {
+      const fac = availableFaculties2hr[idx] || facultyList[idx % facultyList.length];
+      const lab = freeLabs[idx] || labs[idx % labs.length];
+      const subj =
+        finalLabSubjects.find((s) => fac?.subjectIds?.includes(s.id)) ||
+        subjectList.find((s) => fac?.subjectIds?.includes(s.id)) ||
+        finalLabSubjects[0] ||
+        subjectList[0];
+
+      populatedBatches[bKey] = {
+        facultyId: fac?.id || '',
+        subjectId: subj?.id || '',
+        labId: lab?.id || '',
+      };
+    });
+
+    setBatches(populatedBatches);
+  }, [isOpen, assignmentId, assignments, selectedTargetType, selectedTargetId, rooms, labs, classes, day, startSlot, subjectList, facultyList, activeSlotEditor]);
 
   // Current Target Name
   const currentTargetName = useMemo(() => {
@@ -450,80 +550,94 @@ export function SlotDrawer() {
     return { isValid: isCanBook, errors, warnings };
   }, [duration, batches, facultyList, labs]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSaveError(null);
+    setIsSaving(true);
 
-    if (duration === 1) {
-      if (!conflictResult.canBook) return;
+    try {
+      if (duration === 1) {
+        if (!conflictResult.canBook) return;
 
-      const payload = {
-        day,
-        startSlot,
-        duration: 1 as const,
-        targetType: selectedTargetType,
-        targetId: selectedTargetId,
-        facultyId,
-        subjectId,
-        roomId: selectedTargetType === 'class' ? roomId : undefined,
-        classId: selectedTargetType !== 'class' ? classId : undefined,
-        labBatches: undefined,
-      };
+        const payload = {
+          day,
+          startSlot,
+          duration: 1 as const,
+          targetType: selectedTargetType,
+          targetId: selectedTargetId,
+          facultyId,
+          subjectId,
+          roomId: selectedTargetType === 'class' ? roomId : undefined,
+          classId: selectedTargetType !== 'class' ? classId : undefined,
+          labBatches: undefined,
+        };
 
-      if (assignmentId) {
-        updateAssignment(assignmentId, payload);
+        if (assignmentId) {
+          await updateAssignment(assignmentId, payload);
+        } else {
+          await addAssignment(payload);
+        }
       } else {
-        addAssignment(payload);
+        // 2-hour 4-batch lab allocation (labs only, no lecture rooms)
+        if (!batchValidation.isValid) return;
+
+        const labBatches: LabBatch[] = BATCH_KEYS.map((bKey) => ({
+          id: bKey,
+          facultyId: batches[bKey].facultyId || batches.A1.facultyId,
+          subjectId: batches[bKey].subjectId || batches.A1.subjectId,
+          labId: batches[bKey].labId || undefined,
+        }));
+
+        const primaryFacultyId = batches.A1.facultyId || facultyList[0]?.id || '';
+        const primarySubjectId = batches.A1.subjectId || subjectList[0]?.id || '';
+        const primaryLabId = batches.A1.labId || undefined;
+
+        const payload = {
+          day,
+          startSlot,
+          duration: 2 as const,
+          targetType: selectedTargetType,
+          targetId: selectedTargetId,
+          facultyId: primaryFacultyId,
+          subjectId: primarySubjectId,
+          roomId: undefined, // Labs have no lecture room
+          labId: selectedTargetType === 'class' ? primaryLabId : undefined,
+          classId: selectedTargetType !== 'class' ? classId : undefined,
+          labBatches,
+        };
+
+        if (assignmentId) {
+          await updateAssignment(assignmentId, payload);
+        } else {
+          await addAssignment(payload);
+        }
       }
-    } else {
-      // 2-hour 4-batch lab allocation (labs only, no lecture rooms)
-      if (!batchValidation.isValid) return;
 
-      const labBatches: LabBatch[] = BATCH_KEYS.map((bKey) => ({
-        id: bKey,
-        facultyId: batches[bKey].facultyId || batches.A1.facultyId,
-        subjectId: batches[bKey].subjectId || batches.A1.subjectId,
-        labId: batches[bKey].labId || undefined,
-      }));
-
-      const primaryFacultyId = batches.A1.facultyId || facultyList[0]?.id || '';
-      const primarySubjectId = batches.A1.subjectId || subjectList[0]?.id || '';
-      const primaryLabId = batches.A1.labId || undefined;
-
-      const payload = {
-        day,
-        startSlot,
-        duration: 2 as const,
-        targetType: selectedTargetType,
-        targetId: selectedTargetId,
-        facultyId: primaryFacultyId,
-        subjectId: primarySubjectId,
-        roomId: undefined, // Labs have no lecture room
-        labId: selectedTargetType === 'class' ? primaryLabId : undefined,
-        classId: selectedTargetType !== 'class' ? classId : undefined,
-        labBatches,
-      };
-
-      if (assignmentId) {
-        updateAssignment(assignmentId, payload);
-      } else {
-        addAssignment(payload);
-      }
+      closeSlotEditor();
+    } catch (err: any) {
+      setSaveError(err.message || 'Failed to save assignment. Is the backend running?');
+    } finally {
+      setIsSaving(false);
     }
-
-    closeSlotEditor();
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (assignmentId && confirm('Remove this scheduled session from the timetable?')) {
-      deleteAssignment(assignmentId);
-      closeSlotEditor();
+      setIsSaving(true);
+      try {
+        await deleteAssignment(assignmentId);
+        closeSlotEditor();
+      } catch (err: any) {
+        setSaveError(err.message || 'Failed to delete assignment.');
+        setIsSaving(false);
+      }
     }
   };
 
   const currentSlotObj = TIME_SLOTS[startSlot];
   const endSlotTime = duration === 2 ? TIME_SLOTS[startSlot + 1]?.end || '06:00' : currentSlotObj?.end;
 
-  const isFormValid = duration === 1 ? (!!facultyId && !!subjectId && conflictResult.canBook) : batchValidation.isValid;
+  const isFormValid = !isSaving && (duration === 1 ? (!!facultyId && !!subjectId && conflictResult.canBook) : batchValidation.isValid);
 
   return (
     <Drawer
@@ -555,7 +669,7 @@ export function SlotDrawer() {
         </div>
       }
     >
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form key={`${assignmentId || 'new'}-${day}-${startSlot}`} onSubmit={handleSubmit} className="space-y-6">
         {/* Slot Duration Selector */}
         <div>
           <label className="block text-xs font-bold text-foreground uppercase tracking-wider mb-2">
@@ -616,7 +730,9 @@ export function SlotDrawer() {
                 </div>
                 <Select value={classId} onValueChange={(val) => setClassId(val)}>
                   <SelectTrigger className="w-full text-xs">
-                    <SelectValue placeholder="Select Attending Class" />
+                    <SelectValue placeholder="Select Attending Class">
+                      {classes.find((c) => c.id === classId)?.name}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {classAvailability.map(({ collegeClass: c, isAvailable, conflictReason, conflictDetail }) => (
@@ -685,13 +801,15 @@ export function SlotDrawer() {
                       onValueChange={(val) => {
                         updateBatchField(batchKey, 'facultyId', val);
                         const newFac = facultyList.find((f) => f.id === val);
-                        if (newFac && bData.subjectId && !newFac.subjectIds.includes(bData.subjectId)) {
+                        if (newFac && (!bData.subjectId || !newFac.subjectIds.includes(bData.subjectId))) {
                           updateBatchField(batchKey, 'subjectId', newFac.subjectIds[0] || bData.subjectId);
                         }
                       }}
                     >
                       <SelectTrigger className="w-full text-xs bg-white">
-                        <SelectValue placeholder="Select Faculty Member" />
+                        <SelectValue placeholder="Select Faculty Member">
+                          {facultyList.find((f) => f.id === bData.facultyId)?.name}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         {facultyAvailability.map(({ faculty, isAvailable, allocatedHours, maxHours, conflictReason, conflictDetail }) => (
@@ -735,7 +853,12 @@ export function SlotDrawer() {
                       onValueChange={(val) => updateBatchField(batchKey, 'subjectId', val)}
                     >
                       <SelectTrigger className="w-full text-xs bg-white">
-                        <SelectValue placeholder="Select Subject" />
+                        <SelectValue placeholder="Select Subject">
+                          {(() => {
+                            const s = subjectList.find((sub) => sub.id === bData.subjectId);
+                            return s ? `${s.code} · ${s.name}` : undefined;
+                          })()}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         {bSubjects.map((s) => (
@@ -766,7 +889,9 @@ export function SlotDrawer() {
                       onValueChange={(val) => updateBatchField(batchKey, 'labId', val)}
                     >
                       <SelectTrigger className="w-full text-xs bg-white">
-                        <SelectValue placeholder="Select Lab Facility" />
+                        <SelectValue placeholder="Select Lab Facility">
+                          {labs.find((l) => l.id === bData.labId)?.name}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         {labAvailability.map(({ lab, isAvailable, conflictReason }) => (
@@ -825,13 +950,15 @@ export function SlotDrawer() {
                 onValueChange={(val) => {
                   setFacultyId(val);
                   const newFac = facultyList.find((f) => f.id === val);
-                  if (newFac && subjectId && !newFac.subjectIds.includes(subjectId)) {
-                    setSubjectId('');
+                  if (newFac && (!subjectId || !newFac.subjectIds.includes(subjectId))) {
+                    setSubjectId(newFac.subjectIds[0] || availableSubjects[0]?.id || subjectId || '');
                   }
                 }}
               >
                 <SelectTrigger className="w-full text-xs">
-                  <SelectValue placeholder="Select Faculty Member" />
+                  <SelectValue placeholder="Select Faculty Member">
+                    {facultyList.find((f) => f.id === facultyId)?.name}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {facultyAvailability.map(({ faculty, isAvailable, allocatedHours, maxHours, conflictReason, conflictDetail }) => (
@@ -876,7 +1003,12 @@ export function SlotDrawer() {
                 onValueChange={(val) => handleSubjectChange(val)}
               >
                 <SelectTrigger className="w-full text-xs">
-                  <SelectValue placeholder="Select Subject" />
+                  <SelectValue placeholder="Select Subject">
+                    {(() => {
+                      const s = subjectList.find((sub) => sub.id === subjectId);
+                      return s ? `${s.code} · ${s.name}` : undefined;
+                    })()}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {availableSubjects.map((s) => (
@@ -903,7 +1035,9 @@ export function SlotDrawer() {
                 </div>
                 <Select value={roomId} onValueChange={(val) => setRoomId(val)}>
                   <SelectTrigger className="w-full text-xs">
-                    <SelectValue placeholder="Auto-selected or choose room" />
+                    <SelectValue placeholder="Auto-selected or choose room">
+                      {rooms.find((r) => r.id === roomId)?.name}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {roomAvailability.map(({ room, isAvailable, conflictReason, conflictDetail }) => (
@@ -985,6 +1119,14 @@ export function SlotDrawer() {
               </div>
             )}
 
+            {/* API Save Error */}
+            {saveError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-2 text-rose-700 text-xs font-medium">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{saveError}</span>
+              </div>
+            )}
+
             {facultyId && subjectId && conflictResult.canBook && (
               <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2 text-emerald-800 text-xs font-medium">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -1023,11 +1165,15 @@ export function SlotDrawer() {
               type="submit"
               variant="primary"
               size="md"
-              disabled={!isFormValid}
+              disabled={!isFormValid || isSaving}
               className="gap-2"
             >
-              <Sparkles className="w-4 h-4" />
-              {assignmentId ? 'Save Changes' : 'Confirm Assignment'}
+              {isSaving ? (
+                <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+              ) : (
+                <Sparkles className="w-4 h-4" />
+              )}
+              {isSaving ? 'Saving...' : assignmentId ? 'Save Changes' : 'Confirm Assignment'}
             </Button>
           </div>
         </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Calendar, Printer, Database, LayoutGrid, Sparkles, RotateCcw, Building2 } from 'lucide-react';
@@ -13,6 +13,7 @@ export function Navbar() {
   const resetToSeedData = useTimetableStore((s) => s.resetToSeedData);
   const assignments = useTimetableStore((s) => s.assignments);
   const faculty = useTimetableStore((s) => s.faculty);
+  const [isResetting, setIsResetting] = useState(false);
 
   const navLinks = [
     { href: '/select', label: 'Hub', icon: LayoutGrid },
@@ -80,16 +81,26 @@ export function Navbar() {
             </div>
 
             <button
-              onClick={() => {
+              onClick={async () => {
                 if (confirm('Reset system data back to institutional default seed records?')) {
-                  resetToSeedData();
+                  setIsResetting(true);
+                  try {
+                    await resetToSeedData();
+                  } finally {
+                    setIsResetting(false);
+                  }
                 }
               }}
+              disabled={isResetting}
               title="Reset to default seed data"
-              className="p-2 rounded-xl text-muted hover:text-foreground hover:bg-surface-subtle border border-border transition-colors flex items-center gap-1.5 text-xs font-medium"
+              className="p-2 rounded-xl text-muted hover:text-foreground hover:bg-surface-subtle border border-border transition-colors flex items-center gap-1.5 text-xs font-medium disabled:opacity-60"
             >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Reset Data</span>
+              {isResetting ? (
+                <span className="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
+              ) : (
+                <RotateCcw className="w-3.5 h-3.5" />
+              )}
+              <span className="hidden sm:inline">{isResetting ? 'Resetting...' : 'Reset Data'}</span>
             </button>
           </div>
         </div>
