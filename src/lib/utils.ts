@@ -11,11 +11,34 @@ export function generateId(prefix = 'id'): string {
 }
 
 /**
- * Extracts clean faculty initials (e.g., "Kiran Khadare" -> "KK", "Dr. Sarah Vance" -> "SV")
+ * Extracts clean faculty initials or nickname (e.g. "KK", "SV", "VAP")
+ * If nickname is provided, returns it in uppercase.
+ * If nickname is not provided, extracts capitalized initials from the full name.
  */
-export function getFacultyInitials(name?: string): string {
-  if (!name) return 'FAC';
-  // Strip academic titles and honorifics
+export function getFacultyInitials(
+  nameOrFaculty?: string | { name?: string; nickname?: string } | null,
+  optionalNickname?: string
+): string {
+  if (!nameOrFaculty) return 'FAC';
+
+  let name = '';
+  let nick = optionalNickname || '';
+
+  if (typeof nameOrFaculty === 'object') {
+    name = nameOrFaculty.name || '';
+    nick = nameOrFaculty.nickname || nick;
+  } else {
+    name = nameOrFaculty;
+  }
+
+  // 1. If custom nickname exists, use it in uppercase
+  if (nick && nick.trim().length > 0) {
+    return nick.trim().toUpperCase();
+  }
+
+  if (!name || !name.trim()) return 'FAC';
+
+  // 2. Fallback: generate clean capital initials from name
   const cleanName = name
     .replace(/\b(Dr\.|Prof\.|Mr\.|Mrs\.|Ms\.|Dr|Prof|Er\.|Er|Dean|HOD|Mam|Madam|Sir)\b/gi, '')
     .trim();

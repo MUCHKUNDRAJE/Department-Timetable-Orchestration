@@ -26,7 +26,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Drawer } from '@/components/ui/Drawer';
 import { Modal } from '@/components/ui/Modal';
 import { calculateFacultyAllocatedHours } from '@/lib/conflict-checker';
-import { cn } from '@/lib/utils';
+import { cn, getFacultyInitials } from '@/lib/utils';
 
 type EntityTab = 'classes' | 'labs' | 'rooms' | 'faculty' | 'subjects';
 
@@ -106,6 +106,7 @@ export function DataManagementStudio() {
     } else if (activeTab === 'faculty') {
       setFormData({
         name: '',
+        nickname: '',
         department: 'Artificial Intelligence & Data Science',
         designation: 'Assistant Professor',
         email: '',
@@ -477,8 +478,15 @@ export function DataManagementStudio() {
                     return (
                       <tr key={f.id} className="hover:bg-surface-hover transition-colors">
                         <td className="p-4">
-                          <div className="font-bold text-foreground">{f.name}</div>
-                          <div className="text-[11px] text-muted font-mono">{f.email}</div>
+                          <div className="flex items-center gap-2.5">
+                            <span className="font-mono text-xs font-black px-2 py-0.5 rounded-lg bg-primary/10 text-primary border border-primary/20 shrink-0">
+                              {getFacultyInitials(f)}
+                            </span>
+                            <div>
+                              <div className="font-bold text-foreground">{f.name}</div>
+                              <div className="text-[11px] text-muted font-mono">{f.email}</div>
+                            </div>
+                          </div>
                         </td>
                         <td className="p-4 text-muted-foreground">{f.designation}</td>
                         <td className="p-4">
@@ -752,6 +760,25 @@ export function DataManagementStudio() {
                   value={formData.name || ''}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="w-full bg-surface border border-border rounded-xl px-3.5 py-2 text-sm text-foreground focus:ring-2 focus:ring-accent"
+                />
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-foreground uppercase">
+                    Faculty Nickname / Short Code
+                  </label>
+                  <span className="text-[10.5px] text-muted-foreground font-mono">
+                    Auto-generates capital initials if empty
+                  </span>
+                </div>
+                <input
+                  type="text"
+                  placeholder="e.g. SV, KK, VAP (Optional)"
+                  value={formData.nickname || ''}
+                  onChange={(e) =>
+                    setFormData({ ...formData, nickname: e.target.value.toUpperCase() })
+                  }
+                  className="w-full bg-surface border border-border rounded-xl px-3.5 py-2 text-sm font-mono uppercase text-foreground focus:ring-2 focus:ring-accent"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">

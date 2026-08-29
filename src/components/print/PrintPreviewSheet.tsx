@@ -98,10 +98,10 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
       const asg = currentAssignments.find((a) => a.subjectId === subjId);
       if (asg) {
         const f = facultyList.find((fac) => fac.id === asg.facultyId);
-        return f ? getFacultyInitials(f.name) : '—';
+        return f ? getFacultyInitials(f) : '—';
       }
       const mapped = facultyList.find((f) => f.subjectIds?.includes(subjId));
-      return mapped ? getFacultyInitials(mapped.name) : '—';
+      return mapped ? getFacultyInitials(mapped) : '—';
     };
 
     // Calculate total hours, lectures, and lab counts
@@ -190,6 +190,81 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
 
                     if (assignment) {
                       const isLab = assignment.duration === 2;
+                      const isBatchLab = isLab && assignment.labBatches && assignment.labBatches.length > 0;
+
+                      if (isBatchLab && assignment.labBatches) {
+                        const bA1 = assignment.labBatches.find((b) => b.id === 'A1');
+                        const bA2 = assignment.labBatches.find((b) => b.id === 'A2');
+                        const bA3 = assignment.labBatches.find((b) => b.id === 'A3');
+                        const bA4 = assignment.labBatches.find((b) => b.id === 'A4');
+
+                        const sA1 = subjects.find((s) => s.id === bA1?.subjectId);
+                        const sA2 = subjects.find((s) => s.id === bA2?.subjectId);
+                        const sA3 = subjects.find((s) => s.id === bA3?.subjectId);
+                        const sA4 = subjects.find((s) => s.id === bA4?.subjectId);
+
+                        const initA1 = sA1 ? getSubjectInitials(sA1) : 'LAB';
+                        const initA2 = sA2 ? getSubjectInitials(sA2) : initA1;
+                        const initA3 = sA3 ? getSubjectInitials(sA3) : initA1;
+                        const initA4 = sA4 ? getSubjectInitials(sA4) : initA1;
+
+                        const g1Subj = Array.from(new Set([initA1, initA2].filter(Boolean))).join('/');
+                        const g2Subj = Array.from(new Set([initA3, initA4].filter(Boolean))).join('/');
+                        const headerSubj = g1Subj === g2Subj ? g1Subj : `${g1Subj} / ${g2Subj}`;
+
+                        const facA1 = getFacultyInitials(facultyList.find((f) => f.id === bA1?.facultyId));
+                        const facA2 = getFacultyInitials(facultyList.find((f) => f.id === bA2?.facultyId));
+                        const facA3 = getFacultyInitials(facultyList.find((f) => f.id === bA3?.facultyId));
+                        const facA4 = getFacultyInitials(facultyList.find((f) => f.id === bA4?.facultyId));
+
+                        const getCleanLabName = (labId?: string) => {
+                          if (labId) {
+                            const l = labs.find((item) => item.id === labId);
+                            if (l) {
+                              return l.name
+                                .replace(/Laboratory/gi, 'Lab')
+                                .replace(/Artificial Intelligence & Data Science/gi, 'AIDS')
+                                .trim();
+                            }
+                          }
+                          return 'Lab';
+                        };
+
+                        const labA1 = getCleanLabName(bA1?.labId);
+                        const labA2 = getCleanLabName(bA2?.labId);
+                        const labA3 = getCleanLabName(bA3?.labId);
+                        const labA4 = getCleanLabName(bA4?.labId);
+
+                        return (
+                          <td
+                            key={`${day}-${slot.id}`}
+                            colSpan={2}
+                            title={`4-Batch Practical: A1[${facA1}], A2[${facA2}], A3[${facA3}], A4[${facA4}] | Labs: ${labA1}, ${labA2}, ${labA3}, ${labA4}`}
+                            className="p-1 border-r border-slate-300 last:border-r-0 align-middle bg-rose-50/85 border-rose-200 text-slate-900"
+                          >
+                            <div className="flex flex-col items-center justify-center gap-0.5 font-mono py-0.5 text-center">
+                              {/* Subject Title */}
+                              <div className="flex items-center justify-center gap-1 text-[10px] font-black text-slate-900 leading-none">
+                                <span className="text-rose-950 font-black">LAB - {headerSubj}</span>
+                                <span className="text-[7px] uppercase px-1 py-0.2 rounded bg-rose-200 text-rose-950 font-extrabold border border-rose-300/80">
+                                  4B
+                                </span>
+                              </div>
+
+                              {/* Batches & Faculty */}
+                              <div className="text-[8.5px] font-bold text-indigo-950 leading-none py-0.5">
+                                A1[{facA1}], A2[{facA2}] <span className="text-slate-400 font-normal">/</span> A3[{facA3}], A4[{facA4}]
+                              </div>
+
+                              {/* Labs */}
+                              <div className="text-[8px] text-slate-600 font-medium leading-none">
+                                {labA1}, {labA2} <span className="text-slate-400 font-normal">/</span> {labA3}, {labA4}
+                              </div>
+                            </div>
+                          </td>
+                        );
+                      }
+
                       const fac = facultyList.find((f) => f.id === assignment.facultyId);
                       const subj = subjects.find((s) => s.id === assignment.subjectId);
                       const room = rooms.find((r) => r.id === assignment.roomId);
@@ -197,8 +272,10 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
                       const cls = classes.find((c) => c.id === assignment.classId);
 
                       const subjectInitials = getSubjectInitials(subj);
-                      const facultyInitials = getFacultyInitials(fac?.name);
-                      const venueDisplay = getVenueDisplay(room, lab);
+                      const facultyInitials = getFacultyInitials(fac);
+                      const venueDisplay = isLab
+                        ? (lab ? getVenueDisplay(undefined, lab) : 'Lab')
+                        : getVenueDisplay(room, lab);
 
                       return (
                         <td
@@ -349,7 +426,7 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                   {displayFaculty.map((f) => {
-                    const initials = getFacultyInitials(f.name);
+                    const initials = getFacultyInitials(f);
                     const scheduleLoad = facultyScheduleHours.get(f.id) || 0;
                     return (
                       <tr key={f.id} className="py-0.5">

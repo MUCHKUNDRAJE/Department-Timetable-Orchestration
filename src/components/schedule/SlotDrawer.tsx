@@ -3,21 +3,17 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Clock,
-  Calendar,
   AlertCircle,
   CheckCircle2,
   Trash2,
-  User,
-  BookOpen,
-  MapPin,
   FlaskConical,
   Sparkles,
+  Layers,
 } from 'lucide-react';
 import { useTimetableStore } from '@/lib/store';
 import { TIME_SLOTS } from '@/lib/constants';
 import { Drawer } from '@/components/ui/Drawer';
 import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
 import {
   Select,
   SelectContent,
@@ -32,7 +28,43 @@ import {
   getLabAvailabilityForSlot,
   getClassAvailabilityForSlot,
 } from '@/lib/conflict-checker';
-import { TargetType } from '@/types/timetable';
+import { LabBatch } from '@/types/timetable';
+
+type BatchKey = 'A1' | 'A2' | 'A3' | 'A4';
+const BATCH_KEYS: BatchKey[] = ['A1', 'A2', 'A3', 'A4'];
+
+interface BatchData {
+  facultyId: string;
+  subjectId: string;
+  labId: string;
+}
+
+const BATCH_COLORS: Record<BatchKey, { badge: string; border: string; bg: string; title: string }> = {
+  A1: {
+    badge: 'bg-indigo-600 text-white',
+    border: 'border-indigo-200 hover:border-indigo-400',
+    bg: 'bg-indigo-50/40',
+    title: 'A1 Batch',
+  },
+  A2: {
+    badge: 'bg-purple-600 text-white',
+    border: 'border-purple-200 hover:border-purple-400',
+    bg: 'bg-purple-50/40',
+    title: 'A2 Batch',
+  },
+  A3: {
+    badge: 'bg-teal-600 text-white',
+    border: 'border-teal-200 hover:border-teal-400',
+    bg: 'bg-teal-50/40',
+    title: 'A3 Batch',
+  },
+  A4: {
+    badge: 'bg-amber-600 text-white',
+    border: 'border-amber-200 hover:border-amber-400',
+    bg: 'bg-amber-50/40',
+    title: 'A4 Batch',
+  },
+};
 
 export function SlotDrawer() {
   const activeSlotEditor = useTimetableStore((s) => s.activeSlotEditor);
@@ -51,13 +83,21 @@ export function SlotDrawer() {
   const updateAssignment = useTimetableStore((s) => s.updateAssignment);
   const deleteAssignment = useTimetableStore((s) => s.deleteAssignment);
 
-  // Form local state
+  // Form local state for 1-hour lecture
   const [facultyId, setFacultyId] = useState('');
   const [subjectId, setSubjectId] = useState('');
   const [duration, setDuration] = useState<1 | 2>(1);
   const [roomId, setRoomId] = useState('');
   const [labId, setLabId] = useState('');
   const [classId, setClassId] = useState('');
+
+  // 4-Batch state for 2-hour lab sessions (A1, A2, A3, A4) - strictly labs only
+  const [batches, setBatches] = useState<Record<BatchKey, BatchData>>({
+    A1: { facultyId: '', subjectId: '', labId: '' },
+    A2: { facultyId: '', subjectId: '', labId: '' },
+    A3: { facultyId: '', subjectId: '', labId: '' },
+    A4: { facultyId: '', subjectId: '', labId: '' },
+  });
 
   const isOpen = !!activeSlotEditor?.isOpen;
   const day = activeSlotEditor?.day || 'Mon';
@@ -77,6 +117,37 @@ export function SlotDrawer() {
         setRoomId(existing.roomId || '');
         setLabId(existing.labId || '');
         setClassId(existing.classId || '');
+
+        if (existing.labBatches && existing.labBatches.length > 0) {
+          const loadedBatches: Record<BatchKey, BatchData> = {
+            A1: { facultyId: '', subjectId: '', labId: '' },
+            A2: { facultyId: '', subjectId: '', labId: '' },
+            A3: { facultyId: '', subjectId: '', labId: '' },
+            A4: { facultyId: '', subjectId: '', labId: '' },
+          };
+          existing.labBatches.forEach((b) => {
+            if (b.id in loadedBatches) {
+              loadedBatches[b.id as BatchKey] = {
+                facultyId: b.facultyId || '',
+                subjectId: b.subjectId || '',
+                labId: b.labId || '',
+              };
+            }
+          });
+          setBatches(loadedBatches);
+        } else {
+          // Legacy single-faculty lab mapped to A1
+          setBatches({
+            A1: {
+              facultyId: existing.facultyId || '',
+              subjectId: existing.subjectId || '',
+              labId: existing.labId || '',
+            },
+            A2: { facultyId: '', subjectId: '', labId: '' },
+            A3: { facultyId: '', subjectId: '', labId: '' },
+            A4: { facultyId: '', subjectId: '', labId: '' },
+          });
+        }
         return;
       }
     }
@@ -97,10 +168,11 @@ export function SlotDrawer() {
             (startSlot + defaultDur > a.startSlot && startSlot + defaultDur <= a.startSlot + a.duration))
       );
     });
-    setRoomId(freeRoom?.id || rooms[0]?.id || '');
+    const defRoomId = freeRoom?.id || rooms[0]?.id || '';
+    setRoomId(defRoomId);
 
-    // Pick first available lab if any
-    const freeLab = labs.find((l) => {
+    // Pick available labs
+    const freeLabs = labs.filter((l) => {
       return !assignments.some(
         (a) =>
           a.day === day &&
@@ -109,7 +181,8 @@ export function SlotDrawer() {
             (startSlot + defaultDur > a.startSlot && startSlot + defaultDur <= a.startSlot + a.duration))
       );
     });
-    setLabId(freeLab?.id || labs[0]?.id || '');
+    const defLabId = freeLabs[0]?.id || labs[0]?.id || '';
+    setLabId(defLabId);
 
     // Pick first available class if any
     const freeClass = classes.find((c) => {
@@ -122,7 +195,18 @@ export function SlotDrawer() {
       );
     });
     setClassId(freeClass?.id || classes[0]?.id || '');
-  }, [isOpen, assignmentId, assignments, selectedTargetType, rooms, labs, classes, day, startSlot]);
+
+    // Default batches for lab mode
+    const labSubjects = subjectList.filter((s) => s.type === 'lab');
+    const defaultLabSubj = labSubjects[0]?.id || subjectList[0]?.id || '';
+
+    setBatches({
+      A1: { facultyId: '', subjectId: defaultLabSubj, labId: freeLabs[0]?.id || labs[0]?.id || '' },
+      A2: { facultyId: '', subjectId: defaultLabSubj, labId: freeLabs[1]?.id || labs[1]?.id || labs[0]?.id || '' },
+      A3: { facultyId: '', subjectId: defaultLabSubj, labId: freeLabs[2]?.id || labs[2]?.id || labs[0]?.id || '' },
+      A4: { facultyId: '', subjectId: defaultLabSubj, labId: freeLabs[3]?.id || labs[3]?.id || labs[0]?.id || '' },
+    });
+  }, [isOpen, assignmentId, assignments, selectedTargetType, rooms, labs, classes, day, startSlot, subjectList]);
 
   // Current Target Name
   const currentTargetName = useMemo(() => {
@@ -152,7 +236,7 @@ export function SlotDrawer() {
     );
   }, [isOpen, day, startSlot, duration, assignments, facultyList, assignmentId, subjectList, classes, labs, rooms]);
 
-  // Real-time Room Availability with conflict detection and where-used details
+  // Real-time Room Availability with conflict detection
   const roomAvailability = useMemo(() => {
     if (!isOpen) return [];
     return getRoomAvailabilityForSlot(
@@ -168,7 +252,7 @@ export function SlotDrawer() {
     );
   }, [isOpen, day, startSlot, duration, assignments, rooms, assignmentId, subjectList, classes, facultyList]);
 
-  // Real-time Lab Availability with conflict detection and where-used details
+  // Real-time Lab Availability with conflict detection
   const labAvailability = useMemo(() => {
     if (!isOpen) return [];
     return getLabAvailabilityForSlot(
@@ -200,7 +284,7 @@ export function SlotDrawer() {
     );
   }, [isOpen, day, startSlot, duration, assignments, classes, assignmentId, subjectList, labs, rooms]);
 
-  // Filter subjects based on chosen faculty
+  // Filter subjects based on chosen faculty for 1-hr mode
   const availableSubjects = useMemo(() => {
     if (!facultyId) return subjectList;
     const selectedFac = facultyList.find((f) => f.id === facultyId);
@@ -208,7 +292,25 @@ export function SlotDrawer() {
     return subjectList.filter((s) => selectedFac.subjectIds.includes(s.id));
   }, [facultyId, facultyList, subjectList]);
 
-  // Auto-switch duration and auto-fill room when subject changes
+  // Helper to get available subjects for a specific batch's chosen faculty
+  const getBatchSubjects = (batchFacultyId: string) => {
+    if (!batchFacultyId) return subjectList;
+    const fac = facultyList.find((f) => f.id === batchFacultyId);
+    if (!fac || !fac.subjectIds.length) return subjectList;
+    return subjectList.filter((s) => fac.subjectIds.includes(s.id));
+  };
+
+  const updateBatchField = (batchKey: BatchKey, field: keyof BatchData, value: string) => {
+    setBatches((prev) => ({
+      ...prev,
+      [batchKey]: {
+        ...prev[batchKey],
+        [field]: value,
+      },
+    }));
+  };
+
+  // Auto-switch duration and auto-fill room when subject changes (for 1-hr single mode)
   const handleSubjectChange = (newSubjectId: string) => {
     setSubjectId(newSubjectId);
     const subj = subjectList.find((s) => s.id === newSubjectId);
@@ -216,7 +318,6 @@ export function SlotDrawer() {
       setDuration(2);
     } else if (selectedTargetType !== 'lab') {
       setDuration(1);
-      // Auto-fill the first available room for lecture subjects when target is class
       if (selectedTargetType === 'class') {
         const availableRoom = roomAvailability.find((r) => r.isAvailable)?.room;
         if (availableRoom) {
@@ -228,8 +329,19 @@ export function SlotDrawer() {
     }
   };
 
-  // Run comprehensive Conflict Check
+  // Run Conflict Check for 1-hr lecture mode
   const conflictResult = useMemo(() => {
+    if (duration === 2) {
+      return {
+        hasConflict: false,
+        canBook: true,
+        errors: [],
+        warnings: [],
+        facultyAllocatedHours: 0,
+        facultyMaxHours: 20,
+      };
+    }
+
     if (!facultyId || !subjectId) {
       return {
         hasConflict: false,
@@ -258,17 +370,17 @@ export function SlotDrawer() {
         facultyId,
         subjectId,
         roomId: selectedTargetType === 'class' ? roomId : undefined,
-        labId: duration === 2 && selectedTargetType === 'class' ? labId : undefined,
+        labId: undefined,
         classId: selectedTargetType !== 'class' ? classId : undefined,
       },
     });
   }, [
+    duration,
     facultyId,
     subjectId,
     assignmentId,
     day,
     startSlot,
-    duration,
     selectedTargetType,
     selectedTargetId,
     roomId,
@@ -282,27 +394,120 @@ export function SlotDrawer() {
     subjectList,
   ]);
 
+  // Validation and intra-batch conflict detection for 4-batch 2-hr lab mode
+  const batchValidation = useMemo(() => {
+    if (duration !== 2) {
+      return { isValid: true, errors: [] as string[], warnings: [] as string[] };
+    }
+
+    const errors: string[] = [];
+    const warnings: string[] = [];
+
+    // At least A1 must have faculty and subject assigned
+    if (!batches.A1.facultyId) {
+      errors.push('A1 batch requires a Faculty Member to be selected.');
+    }
+    if (!batches.A1.subjectId) {
+      errors.push('A1 batch requires a Subject to be selected.');
+    }
+
+    // Check for duplicate faculty assignment across batches in this 2hr slot
+    const facultyBatchMap: Record<string, BatchKey[]> = {};
+    BATCH_KEYS.forEach((bKey) => {
+      const fId = batches[bKey].facultyId;
+      if (fId) {
+        if (!facultyBatchMap[fId]) facultyBatchMap[fId] = [];
+        facultyBatchMap[fId].push(bKey);
+      }
+    });
+
+    Object.entries(facultyBatchMap).forEach(([fId, assignedBatchKeys]) => {
+      if (assignedBatchKeys.length > 1) {
+        const facName = facultyList.find((f) => f.id === fId)?.name || 'Faculty';
+        errors.push(`${facName} is assigned to multiple batches (${assignedBatchKeys.join(', ')}) simultaneously.`);
+      }
+    });
+
+    // Check for duplicate lab assignment across batches in this 2hr slot
+    const labBatchMap: Record<string, BatchKey[]> = {};
+    BATCH_KEYS.forEach((bKey) => {
+      const lId = batches[bKey].labId;
+      if (lId) {
+        if (!labBatchMap[lId]) labBatchMap[lId] = [];
+        labBatchMap[lId].push(bKey);
+      }
+    });
+
+    Object.entries(labBatchMap).forEach(([lId, assignedBatchKeys]) => {
+      if (assignedBatchKeys.length > 1) {
+        const labObj = labs.find((l) => l.id === lId);
+        const lName = labObj?.name || 'Lab';
+        errors.push(`${lName} is assigned to multiple batches (${assignedBatchKeys.join(', ')}) simultaneously.`);
+      }
+    });
+
+    const isCanBook = errors.length === 0 && !!batches.A1.facultyId && !!batches.A1.subjectId;
+    return { isValid: isCanBook, errors, warnings };
+  }, [duration, batches, facultyList, labs]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!conflictResult.canBook) return;
 
-    const payload = {
-      day,
-      startSlot,
-      duration,
-      targetType: selectedTargetType,
-      targetId: selectedTargetId,
-      facultyId,
-      subjectId,
-      roomId: selectedTargetType === 'class' ? roomId : undefined,
-      labId: duration === 2 && selectedTargetType === 'class' ? labId : undefined,
-      classId: selectedTargetType !== 'class' ? classId : undefined,
-    };
+    if (duration === 1) {
+      if (!conflictResult.canBook) return;
 
-    if (assignmentId) {
-      updateAssignment(assignmentId, payload);
+      const payload = {
+        day,
+        startSlot,
+        duration: 1 as const,
+        targetType: selectedTargetType,
+        targetId: selectedTargetId,
+        facultyId,
+        subjectId,
+        roomId: selectedTargetType === 'class' ? roomId : undefined,
+        classId: selectedTargetType !== 'class' ? classId : undefined,
+        labBatches: undefined,
+      };
+
+      if (assignmentId) {
+        updateAssignment(assignmentId, payload);
+      } else {
+        addAssignment(payload);
+      }
     } else {
-      addAssignment(payload);
+      // 2-hour 4-batch lab allocation (labs only, no lecture rooms)
+      if (!batchValidation.isValid) return;
+
+      const labBatches: LabBatch[] = BATCH_KEYS.map((bKey) => ({
+        id: bKey,
+        facultyId: batches[bKey].facultyId || batches.A1.facultyId,
+        subjectId: batches[bKey].subjectId || batches.A1.subjectId,
+        labId: batches[bKey].labId || undefined,
+      }));
+
+      const primaryFacultyId = batches.A1.facultyId || facultyList[0]?.id || '';
+      const primarySubjectId = batches.A1.subjectId || subjectList[0]?.id || '';
+      const primaryLabId = batches.A1.labId || undefined;
+
+      const payload = {
+        day,
+        startSlot,
+        duration: 2 as const,
+        targetType: selectedTargetType,
+        targetId: selectedTargetId,
+        facultyId: primaryFacultyId,
+        subjectId: primarySubjectId,
+        roomId: undefined, // Labs have no lecture room
+        labId: selectedTargetType === 'class' ? primaryLabId : undefined,
+        classId: selectedTargetType !== 'class' ? classId : undefined,
+        labBatches,
+      };
+
+      if (assignmentId) {
+        updateAssignment(assignmentId, payload);
+      } else {
+        addAssignment(payload);
+      }
     }
 
     closeSlotEditor();
@@ -317,6 +522,8 @@ export function SlotDrawer() {
 
   const currentSlotObj = TIME_SLOTS[startSlot];
   const endSlotTime = duration === 2 ? TIME_SLOTS[startSlot + 1]?.end || '06:00' : currentSlotObj?.end;
+
+  const isFormValid = duration === 1 ? (!!facultyId && !!subjectId && conflictResult.canBook) : batchValidation.isValid;
 
   return (
     <Drawer
@@ -351,14 +558,14 @@ export function SlotDrawer() {
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Slot Duration Selector */}
         <div>
-          <label className="block text-sm font-bold text-foreground uppercase tracking-wider mb-2">
-            Session Duration
+          <label className="block text-xs font-bold text-foreground uppercase tracking-wider mb-2">
+            Session Duration & Type
           </label>
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
               onClick={() => setDuration(1)}
-              className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border text-sm font-bold transition-all ${
+              className={`flex items-center justify-center gap-2 py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
                 duration === 1
                   ? 'bg-primary-light border-primary text-primary shadow-xs'
                   : 'bg-surface border-border text-muted hover:border-border-strong'
@@ -370,166 +577,63 @@ export function SlotDrawer() {
             <button
               type="button"
               onClick={() => setDuration(2)}
-              className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border text-sm font-bold transition-all ${
+              className={`flex items-center justify-center gap-2 py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
                 duration === 2
                   ? 'bg-highlight-light border-highlight text-highlight shadow-xs'
                   : 'bg-surface border-border text-muted hover:border-border-strong'
               }`}
             >
               <FlaskConical className="w-4 h-4" />
-              2 Hours (Lab Block)
+              2 Hours (4-Batch Lab)
             </button>
           </div>
         </div>
 
-        {/* Faculty Select */}
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <label className="block text-sm font-bold text-foreground uppercase tracking-wider">
-              Faculty Member *
-            </label>
-            <span className="text-xs text-muted-foreground">Pre-filtered for availability</span>
-          </div>
-
-          <Select
-            value={facultyId}
-            onValueChange={(val) => {
-              setFacultyId(val);
-              const newFac = facultyList.find((f) => f.id === val);
-              if (newFac && subjectId && !newFac.subjectIds.includes(subjectId)) {
-                setSubjectId('');
-              }
-            }}
-          >
-            <SelectTrigger className="w-full text-sm">
-              <SelectValue placeholder="Select Faculty Member" />
-            </SelectTrigger>
-            <SelectContent>
-              {facultyAvailability.map(({ faculty, isAvailable, allocatedHours, maxHours, conflictReason, conflictDetail }) => (
-                <SelectItem key={faculty.id} value={faculty.id} disabled={!isAvailable}>
-                  <div className="flex flex-col gap-0.5 py-0.5 max-w-full">
-                    <div className="flex items-center gap-1.5">
-                      <span className={isAvailable ? 'text-emerald-600 font-bold' : 'text-rose-500 font-bold'} aria-hidden>
-                        {isAvailable ? '✓' : '✕'}
-                      </span>
-                      <span className="font-semibold">{faculty.name}</span>
-                      <span className="text-muted-foreground text-[11px] ml-auto shrink-0 font-mono">
-                        {allocatedHours}/{maxHours}h
-                      </span>
-                    </div>
-                    {!isAvailable && (
-                      <div className="text-[11px] text-rose-600 font-medium pl-4 leading-tight">
-                        Not available at this point — {conflictReason}{conflictDetail ? ` (${conflictDetail})` : ''}
-                      </div>
-                    )}
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Subject Select */}
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <label className="block text-sm font-bold text-foreground uppercase tracking-wider">
-              Subject *
-            </label>
-            {facultyId && (
-              <span className="text-xs text-primary font-medium">
-                {availableSubjects.length} subjects taught
-              </span>
-            )}
-          </div>
-
-          <Select
-            value={subjectId}
-            onValueChange={(val) => handleSubjectChange(val)}
-          >
-            <SelectTrigger className="w-full text-sm">
-              <SelectValue placeholder="Select Subject" />
-            </SelectTrigger>
-            <SelectContent>
-              {availableSubjects.map((s) => (
-                <SelectItem key={s.id} value={s.id}>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono font-bold text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">{s.code}</span>
-                    <span className="font-medium">{s.name}</span>
-                    <span className="text-muted-foreground text-[11px] ml-auto">{s.type.toUpperCase()}</span>
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Location Assignment */}
-        {selectedTargetType === 'class' && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-sm font-bold text-foreground uppercase tracking-wider">
-                  Lecture Room
-                </label>
-                <span className="text-xs text-muted-foreground">Real-time occupancy check</span>
+        {/* ============================================================ */}
+        {/* 2-HOUR LAB 4-BATCH ALLOCATION (A1, A2, A3, A4)              */}
+        {/* ============================================================ */}
+        {duration === 2 ? (
+          <div className="space-y-5">
+            <div className="flex items-center justify-between pb-1 border-b border-border">
+              <div className="flex items-center gap-2">
+                <Layers className="w-4 h-4 text-highlight" />
+                <span className="text-xs font-bold text-foreground uppercase tracking-wider">
+                  4-Batch Allocation (A1, A2, A3, A4)
+                </span>
               </div>
-              <Select value={roomId} onValueChange={(val) => setRoomId(val)}>
-                <SelectTrigger className="w-fit text-sm whitespace-nowrap">
-                  <SelectValue placeholder="Auto-selected or choose room" />
-                </SelectTrigger>
-                <SelectContent>
-                  {roomAvailability.map(({ room, isAvailable, conflictReason, conflictDetail }) => (
-                    <SelectItem key={room.id} value={room.id} disabled={!isAvailable}>
-                      <div className="flex flex-col gap-0.5 py-0.5 max-w-full">
-                        <div className="flex items-center gap-1.5">
-                          <span className={isAvailable ? 'text-emerald-600 font-bold' : 'text-rose-500 font-bold'} aria-hidden>
-                            {isAvailable ? '✓' : '✕'}
-                          </span>
-                          <span className="font-semibold font-mono">{room.name}</span>
-                          <span className="text-muted-foreground text-xs ml-auto shrink-0 font-mono">
-                            {room.capacity} seats
-                          </span>
-                        </div>
-                        {!isAvailable && (
-                          <div className="text-[11px] text-rose-600 font-medium pl-4 leading-tight">
-                            Not available at this point — {conflictReason}{conflictDetail ? ` (${conflictDetail})` : ''}
-                          </div>
-                        )}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <span className="text-[11px] text-muted-foreground font-mono">
+                2 Hr Practical Slot
+              </span>
             </div>
 
-            {duration === 2 && (
+            {/* If target is Lab/Room, which Class is attending */}
+            {selectedTargetType !== 'class' && (
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-bold text-foreground uppercase tracking-wider">
-                    Lab Facility
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold text-foreground uppercase tracking-wider">
+                    Attending Class / Student Group *
                   </label>
-                  <span className="text-xs text-muted-foreground">Real-time lab status</span>
                 </div>
-                <Select value={labId} onValueChange={(val) => setLabId(val)}>
-                  <SelectTrigger className="w-full text-sm">
-                    <SelectValue placeholder="Select Lab" />
+                <Select value={classId} onValueChange={(val) => setClassId(val)}>
+                  <SelectTrigger className="w-full text-xs">
+                    <SelectValue placeholder="Select Attending Class" />
                   </SelectTrigger>
                   <SelectContent>
-                    {labAvailability.map(({ lab, isAvailable, conflictReason, conflictDetail }) => (
-                      <SelectItem key={lab.id} value={lab.id} disabled={!isAvailable}>
+                    {classAvailability.map(({ collegeClass: c, isAvailable, conflictReason, conflictDetail }) => (
+                      <SelectItem key={c.id} value={c.id} disabled={!isAvailable}>
                         <div className="flex flex-col gap-0.5 py-0.5 max-w-full">
                           <div className="flex items-center gap-1.5">
                             <span className={isAvailable ? 'text-emerald-600 font-bold' : 'text-rose-500 font-bold'} aria-hidden>
                               {isAvailable ? '✓' : '✕'}
                             </span>
-                            <span className="font-semibold">{lab.name}</span>
-                            <span className="text-muted-foreground text-xs ml-auto shrink-0 font-mono">
-                              {lab.capacity} cap
+                            <span className="font-semibold">{c.name}</span>
+                            <span className="text-muted-foreground text-xs ml-auto shrink-0">
+                              Sem {c.semester} · Sec {c.section}
                             </span>
                           </div>
                           {!isAvailable && (
                             <div className="text-[11px] text-rose-600 font-medium pl-4 leading-tight">
-                              Not available at this point — {conflictReason}{conflictDetail ? ` (${conflictDetail})` : ''}
+                              Not available — {conflictReason}{conflictDetail ? ` (${conflictDetail})` : ''}
                             </div>
                           )}
                         </div>
@@ -539,91 +643,364 @@ export function SlotDrawer() {
                 </Select>
               </div>
             )}
-          </div>
-        )}
 
-        {/* If target is Lab/Room, which Class is attending */}
-        {selectedTargetType !== 'class' && (
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-sm font-bold text-foreground uppercase tracking-wider">
-                Attending Student Group / Class *
-              </label>
-              <span className="text-xs text-muted-foreground">Class schedule check</span>
-            </div>
-            <Select value={classId} onValueChange={(val) => setClassId(val)}>
-              <SelectTrigger className="w-full text-sm">
-                <SelectValue placeholder="Select Attending Class" />
-              </SelectTrigger>
-              <SelectContent>
-                {classAvailability.map(({ collegeClass: c, isAvailable, conflictReason, conflictDetail }) => (
-                  <SelectItem key={c.id} value={c.id} disabled={!isAvailable}>
-                    <div className="flex flex-col gap-0.5 py-0.5 max-w-full">
-                      <div className="flex items-center gap-1.5">
-                        <span className={isAvailable ? 'text-emerald-600 font-bold' : 'text-rose-500 font-bold'} aria-hidden>
-                          {isAvailable ? '✓' : '✕'}
+            {/* 4 Batch Cards: A1, A2, A3, A4 */}
+            {BATCH_KEYS.map((batchKey) => {
+              const bData = batches[batchKey];
+              const bSubjects = getBatchSubjects(bData.facultyId);
+              const { badge, border, bg, title } = BATCH_COLORS[batchKey];
+
+              return (
+                <div
+                  key={batchKey}
+                  className={`p-3.5 rounded-xl border ${border} ${bg} space-y-3 transition-all`}
+                >
+                  {/* Batch Header */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs font-black px-2 py-0.5 rounded-md ${badge} shadow-xs font-mono`}>
+                        {title}
+                      </span>
+                      <span className="text-xs font-semibold text-foreground">
+                        {batchKey} Practical Section
+                      </span>
+                    </div>
+                    {bData.facultyId && (
+                      <span className="text-[11px] font-mono text-muted-foreground font-semibold">
+                        {facultyList.find((f) => f.id === bData.facultyId)?.name?.split(' ')[0]}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Faculty Selection */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[11px] font-bold text-foreground uppercase tracking-wider">
+                        Faculty Member *
+                      </label>
+                      <span className="text-[10px] text-muted-foreground">Pre-filtered for availability</span>
+                    </div>
+                    <Select
+                      value={bData.facultyId}
+                      onValueChange={(val) => {
+                        updateBatchField(batchKey, 'facultyId', val);
+                        const newFac = facultyList.find((f) => f.id === val);
+                        if (newFac && bData.subjectId && !newFac.subjectIds.includes(bData.subjectId)) {
+                          updateBatchField(batchKey, 'subjectId', newFac.subjectIds[0] || bData.subjectId);
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="w-full text-xs bg-white">
+                        <SelectValue placeholder="Select Faculty Member" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {facultyAvailability.map(({ faculty, isAvailable, allocatedHours, maxHours, conflictReason, conflictDetail }) => (
+                          <SelectItem key={faculty.id} value={faculty.id} disabled={!isAvailable}>
+                            <div className="flex flex-col gap-0.5 py-0.5 max-w-full">
+                              <div className="flex items-center gap-1.5">
+                                <span className={isAvailable ? 'text-emerald-600 font-bold' : 'text-rose-500 font-bold'} aria-hidden>
+                                  {isAvailable ? '✓' : '✕'}
+                                </span>
+                                <span className="font-semibold">{faculty.name}</span>
+                                <span className="text-muted-foreground text-[11px] ml-auto shrink-0 font-mono">
+                                  {allocatedHours}/{maxHours}h
+                                </span>
+                              </div>
+                              {!isAvailable && (
+                                <div className="text-[11px] text-rose-600 font-medium pl-4 leading-tight">
+                                  Unavailable — {conflictReason}{conflictDetail ? ` (${conflictDetail})` : ''}
+                                </div>
+                              )}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Subject Selection */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[11px] font-bold text-foreground uppercase tracking-wider">
+                        Subject *
+                      </label>
+                      {bData.facultyId && (
+                        <span className="text-[10px] text-primary font-medium">
+                          {bSubjects.length} mapped
                         </span>
-                        <span className="font-semibold">{c.name}</span>
-                        <span className="text-muted-foreground text-xs ml-auto shrink-0">
-                          Sem {c.semester} · Sec {c.section}
-                        </span>
-                      </div>
-                      {!isAvailable && (
-                        <div className="text-[11px] text-rose-600 font-medium pl-4 leading-tight">
-                          Not available at this point — {conflictReason}{conflictDetail ? ` (${conflictDetail})` : ''}
-                        </div>
                       )}
                     </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
+                    <Select
+                      value={bData.subjectId}
+                      onValueChange={(val) => updateBatchField(batchKey, 'subjectId', val)}
+                    >
+                      <SelectTrigger className="w-full text-xs bg-white">
+                        <SelectValue placeholder="Select Subject" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {bSubjects.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-bold text-[11px] bg-primary/10 text-primary px-1.5 py-0.5 rounded">
+                                {s.code}
+                              </span>
+                              <span className="font-medium">{s.name}</span>
+                              <span className="text-muted-foreground text-[10px] ml-auto">{s.type.toUpperCase()}</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-        {/* Real-time Conflict & Warning Banners */}
-        {conflictResult.errors.length > 0 && (
-          <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl space-y-1.5">
-            <div className="flex items-center gap-2 text-rose-700 font-bold text-xs">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>Scheduling Conflict Detected</span>
+                  {/* Lab Facility */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[11px] font-bold text-foreground uppercase tracking-wider">
+                        Lab Facility *
+                      </label>
+                      <span className="text-[10px] text-muted-foreground">Real-time lab status</span>
+                    </div>
+                    <Select
+                      value={bData.labId}
+                      onValueChange={(val) => updateBatchField(batchKey, 'labId', val)}
+                    >
+                      <SelectTrigger className="w-full text-xs bg-white">
+                        <SelectValue placeholder="Select Lab Facility" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {labAvailability.map(({ lab, isAvailable, conflictReason }) => (
+                          <SelectItem key={lab.id} value={lab.id} disabled={!isAvailable}>
+                            <div className="flex items-center gap-1.5">
+                              <span className={isAvailable ? 'text-emerald-600 font-bold' : 'text-rose-500 font-bold'}>
+                                {isAvailable ? '✓' : '✕'}
+                              </span>
+                              <span className="font-semibold text-xs">{lab.name}</span>
+                              {!isAvailable && (
+                                <span className="text-[10px] text-rose-500 ml-auto truncate max-w-[120px]">
+                                  ({conflictReason})
+                                </span>
+                              )}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Batch Validation Error Alerts */}
+            {batchValidation.errors.length > 0 && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl space-y-1">
+                <div className="flex items-center gap-2 text-rose-700 font-bold text-xs">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>Please Resolve Batch Conflicts</span>
+                </div>
+                <ul className="text-xs text-rose-700 space-y-0.5 list-disc pl-5">
+                  {batchValidation.errors.map((err, i) => (
+                    <li key={i}>{err}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* ============================================================ */
+          /* 1-HOUR LECTURE STANDARD FORM                                 */
+          /* ============================================================ */
+          <div className="space-y-4">
+            {/* Faculty Select */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold text-foreground uppercase tracking-wider">
+                  Faculty Member *
+                </label>
+                <span className="text-xs text-muted-foreground">Pre-filtered for availability</span>
+              </div>
+
+              <Select
+                value={facultyId}
+                onValueChange={(val) => {
+                  setFacultyId(val);
+                  const newFac = facultyList.find((f) => f.id === val);
+                  if (newFac && subjectId && !newFac.subjectIds.includes(subjectId)) {
+                    setSubjectId('');
+                  }
+                }}
+              >
+                <SelectTrigger className="w-full text-xs">
+                  <SelectValue placeholder="Select Faculty Member" />
+                </SelectTrigger>
+                <SelectContent>
+                  {facultyAvailability.map(({ faculty, isAvailable, allocatedHours, maxHours, conflictReason, conflictDetail }) => (
+                    <SelectItem key={faculty.id} value={faculty.id} disabled={!isAvailable}>
+                      <div className="flex flex-col gap-0.5 py-0.5 max-w-full">
+                        <div className="flex items-center gap-1.5">
+                          <span className={isAvailable ? 'text-emerald-600 font-bold' : 'text-rose-500 font-bold'} aria-hidden>
+                            {isAvailable ? '✓' : '✕'}
+                          </span>
+                          <span className="font-semibold">{faculty.name}</span>
+                          <span className="text-muted-foreground text-[11px] ml-auto shrink-0 font-mono">
+                            {allocatedHours}/{maxHours}h
+                          </span>
+                        </div>
+                        {!isAvailable && (
+                          <div className="text-[11px] text-rose-600 font-medium pl-4 leading-tight">
+                            Not available — {conflictReason}{conflictDetail ? ` (${conflictDetail})` : ''}
+                          </div>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <ul className="text-xs text-rose-700 space-y-1 list-disc pl-5">
-              {conflictResult.errors.map((err, i) => (
-                <li key={i}>{err}</li>
-              ))}
-            </ul>
-          </div>
-        )}
 
-        {conflictResult.warnings.length > 0 && (
-          <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1">
-            <div className="flex items-center gap-1.5 text-amber-800 font-bold text-xs">
-              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-              <span>Notice</span>
+            {/* Subject Select */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold text-foreground uppercase tracking-wider">
+                  Subject *
+                </label>
+                {facultyId && (
+                  <span className="text-xs text-primary font-medium">
+                    {availableSubjects.length} subjects taught
+                  </span>
+                )}
+              </div>
+
+              <Select
+                value={subjectId}
+                onValueChange={(val) => handleSubjectChange(val)}
+              >
+                <SelectTrigger className="w-full text-xs">
+                  <SelectValue placeholder="Select Subject" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableSubjects.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">{s.code}</span>
+                        <span className="font-medium">{s.name}</span>
+                        <span className="text-muted-foreground text-[11px] ml-auto">{s.type.toUpperCase()}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <ul className="text-xs text-amber-800 space-y-0.5 list-disc pl-4">
-              {conflictResult.warnings.map((warn, i) => (
-                <li key={i}>{warn}</li>
-              ))}
-            </ul>
-          </div>
-        )}
 
-        {facultyId && subjectId && conflictResult.canBook && (
-          <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2 text-emerald-800 text-xs font-medium">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>
-              Conflict-free slot confirmed! Faculty hours:{' '}
-              <strong>
-                {conflictResult.facultyAllocatedHours + duration} / {conflictResult.facultyMaxHours} hrs
-              </strong>
-            </span>
+            {/* Location Assignment */}
+            {selectedTargetType === 'class' && (
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold text-foreground uppercase tracking-wider">
+                    Lecture Room
+                  </label>
+                  <span className="text-xs text-muted-foreground">Real-time occupancy check</span>
+                </div>
+                <Select value={roomId} onValueChange={(val) => setRoomId(val)}>
+                  <SelectTrigger className="w-full text-xs">
+                    <SelectValue placeholder="Auto-selected or choose room" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {roomAvailability.map(({ room, isAvailable, conflictReason, conflictDetail }) => (
+                      <SelectItem key={room.id} value={room.id} disabled={!isAvailable}>
+                        <div className="flex flex-col gap-0.5 py-0.5 max-w-full">
+                          <div className="flex items-center gap-1.5">
+                            <span className={isAvailable ? 'text-emerald-600 font-bold' : 'text-rose-500 font-bold'} aria-hidden>
+                              {isAvailable ? '✓' : '✕'}
+                            </span>
+                            <span className="font-semibold font-mono">{room.name}</span>
+                            <span className="text-muted-foreground text-xs ml-auto shrink-0 font-mono">
+                              {room.capacity} seats
+                            </span>
+                          </div>
+                          {!isAvailable && (
+                            <div className="text-[11px] text-rose-600 font-medium pl-4 leading-tight">
+                              Not available — {conflictReason}{conflictDetail ? ` (${conflictDetail})` : ''}
+                            </div>
+                          )}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* If target is Lab/Room, which Class is attending */}
+            {selectedTargetType !== 'class' && (
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold text-foreground uppercase tracking-wider">
+                    Attending Student Group / Class *
+                  </label>
+                  <span className="text-xs text-muted-foreground">Class schedule check</span>
+                </div>
+                <Select value={classId} onValueChange={(val) => setClassId(val)}>
+                  <SelectTrigger className="w-full text-xs">
+                    <SelectValue placeholder="Select Attending Class" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {classAvailability.map(({ collegeClass: c, isAvailable, conflictReason, conflictDetail }) => (
+                      <SelectItem key={c.id} value={c.id} disabled={!isAvailable}>
+                        <div className="flex flex-col gap-0.5 py-0.5 max-w-full">
+                          <div className="flex items-center gap-1.5">
+                            <span className={isAvailable ? 'text-emerald-600 font-bold' : 'text-rose-500 font-bold'} aria-hidden>
+                              {isAvailable ? '✓' : '✕'}
+                            </span>
+                            <span className="font-semibold">{c.name}</span>
+                            <span className="text-muted-foreground text-xs ml-auto shrink-0">
+                              Sem {c.semester} · Sec {c.section}
+                            </span>
+                          </div>
+                          {!isAvailable && (
+                            <div className="text-[11px] text-rose-600 font-medium pl-4 leading-tight">
+                              Not available — {conflictReason}{conflictDetail ? ` (${conflictDetail})` : ''}
+                            </div>
+                          )}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* Conflict & Warning Banners for 1-hr */}
+            {conflictResult.errors.length > 0 && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl space-y-1">
+                <div className="flex items-center gap-2 text-rose-700 font-bold text-xs">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>Scheduling Conflict Detected</span>
+                </div>
+                <ul className="text-xs text-rose-700 space-y-0.5 list-disc pl-5">
+                  {conflictResult.errors.map((err, i) => (
+                    <li key={i}>{err}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {facultyId && subjectId && conflictResult.canBook && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2 text-emerald-800 text-xs font-medium">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>
+                  Conflict-free slot confirmed! Faculty hours:{' '}
+                  <strong>
+                    {conflictResult.facultyAllocatedHours + duration} / {conflictResult.facultyMaxHours} hrs
+                  </strong>
+                </span>
+              </div>
+            )}
           </div>
         )}
 
         {/* Form Action Controls */}
-        <div className="pt-4 border-t border-border flex items-center justify-between gap-3">
+        <div className="pt-4 border-t border-border flex items-center justify-between gap-3 sticky bottom-0 bg-surface/95 backdrop-blur-xs py-2">
           {assignmentId ? (
             <Button
               type="button"
@@ -646,7 +1023,7 @@ export function SlotDrawer() {
               type="submit"
               variant="primary"
               size="md"
-              disabled={!facultyId || !subjectId || !conflictResult.canBook}
+              disabled={!isFormValid}
               className="gap-2"
             >
               <Sparkles className="w-4 h-4" />

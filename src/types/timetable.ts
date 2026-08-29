@@ -48,11 +48,19 @@ export interface Subject {
 export interface Faculty {
   id: string;
   name: string;
+  nickname?: string; // Optional short code / initials (e.g. KK, SV, VAP)
   department: string;
   designation: string;
   email: string;
   maxWeeklyHours: number; // default 20
   subjectIds: string[]; // subjects taught
+}
+
+export interface LabBatch {
+  id: 'A1' | 'A2' | 'A3' | 'A4';
+  facultyId: string;
+  subjectId: string;
+  labId?: string;
 }
 
 export interface Assignment {
@@ -67,6 +75,7 @@ export interface Assignment {
   subjectId: string;
   roomId?: string; // Assigned physical room (if target is Class)
   labId?: string; // Assigned lab (if subject is Lab and target is Class)
+  labBatches?: LabBatch[]; // 4-batch division (A1, A2, A3, A4) for 2hr lab sessions
 }
 
 export interface ConflictCheckResult {

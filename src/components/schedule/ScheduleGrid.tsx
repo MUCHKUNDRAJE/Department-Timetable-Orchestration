@@ -100,9 +100,113 @@ export function ScheduleGrid() {
                   const attendingClass = classes.find((c) => c.id === assignment?.classId);
 
                   if (assignment) {
+                    const isBatchLab = isLab && assignment.labBatches && assignment.labBatches.length > 0;
+
+                    if (isBatchLab && assignment.labBatches) {
+                      const bA1 = assignment.labBatches.find((b) => b.id === 'A1');
+                      const bA2 = assignment.labBatches.find((b) => b.id === 'A2');
+                      const bA3 = assignment.labBatches.find((b) => b.id === 'A3');
+                      const bA4 = assignment.labBatches.find((b) => b.id === 'A4');
+
+                      const sA1 = subjects.find((s) => s.id === bA1?.subjectId);
+                      const sA2 = subjects.find((s) => s.id === bA2?.subjectId);
+                      const sA3 = subjects.find((s) => s.id === bA3?.subjectId);
+                      const sA4 = subjects.find((s) => s.id === bA4?.subjectId);
+
+                      const initA1 = sA1 ? getSubjectInitials(sA1) : 'LAB';
+                      const initA2 = sA2 ? getSubjectInitials(sA2) : initA1;
+                      const initA3 = sA3 ? getSubjectInitials(sA3) : initA1;
+                      const initA4 = sA4 ? getSubjectInitials(sA4) : initA1;
+
+                      const g1Subj = Array.from(new Set([initA1, initA2].filter(Boolean))).join('/');
+                      const g2Subj = Array.from(new Set([initA3, initA4].filter(Boolean))).join('/');
+                      const headerSubj = g1Subj === g2Subj ? g1Subj : `${g1Subj} / ${g2Subj}`;
+
+                      const facA1 = getFacultyInitials(faculty.find((f) => f.id === bA1?.facultyId));
+                      const facA2 = getFacultyInitials(faculty.find((f) => f.id === bA2?.facultyId));
+                      const facA3 = getFacultyInitials(faculty.find((f) => f.id === bA3?.facultyId));
+                      const facA4 = getFacultyInitials(faculty.find((f) => f.id === bA4?.facultyId));
+
+                      const getCleanLabName = (labId?: string) => {
+                        if (labId) {
+                          const l = labs.find((item) => item.id === labId);
+                          if (l) {
+                            return l.name
+                              .replace(/Laboratory/gi, 'Lab')
+                              .replace(/Artificial Intelligence & Data Science/gi, 'AIDS')
+                              .trim();
+                          }
+                        }
+                        return 'Lab';
+                      };
+
+                      const labA1 = getCleanLabName(bA1?.labId);
+                      const labA2 = getCleanLabName(bA2?.labId);
+                      const labA3 = getCleanLabName(bA3?.labId);
+                      const labA4 = getCleanLabName(bA4?.labId);
+
+                      return (
+                        <div
+                          key={`${day}-${slot.id}`}
+                          className="p-1.5 border-r border-border last:border-r-0 relative flex flex-col min-w-0 overflow-hidden col-span-2 bg-highlight-light/30"
+                        >
+                          <motion.div
+                            whileHover={{ scale: 1.01, y: -1 }}
+                            transition={{ duration: 0.15 }}
+                            onClick={() => openSlotEditor(day, slot.id, assignment.duration, assignment.id)}
+                            title={`4-Batch Practical Slot | A1[${facA1}], A2[${facA2}], A3[${facA3}], A4[${facA4}] | Labs: ${labA1}, ${labA2}, ${labA3}, ${labA4}`}
+                            className="w-full h-[84px] min-h-[84px] max-h-[84px] rounded-xl p-2 flex flex-col justify-between cursor-pointer border transition-all duration-150 relative group min-w-0 overflow-hidden select-none bg-gradient-to-r from-pink-500/15 via-purple-500/10 to-indigo-500/15 border-highlight/50 hover:border-highlight hover:shadow-card"
+                          >
+                            {/* Top Row: LAB - Subject Initials + Time */}
+                            <div className="flex items-center justify-between gap-1 min-w-0">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="font-mono text-[11px] font-black px-1.5 py-0.5 rounded tracking-wider shadow-xs shrink-0 bg-highlight text-white uppercase">
+                                  LAB - {headerSubj}
+                                </span>
+                                <span className="text-[9px] font-extrabold uppercase tracking-wider text-highlight bg-highlight/15 px-1 py-0.5 rounded shrink-0">
+                                  4 Batches
+                                </span>
+                              </div>
+                              <span className="text-[10px] font-mono text-muted flex items-center gap-0.5 opacity-70 group-hover:opacity-100 shrink-0">
+                                <Clock className="w-2.5 h-2.5" />
+                                {TIME_SLOTS[slot.id]?.shortLabel}
+                              </span>
+                            </div>
+
+                            {/* Middle Row: A1[faculty], A2[faculty] / A3[faculty], A4[faculty] */}
+                            <div className="my-auto flex items-center justify-between gap-1 font-mono text-[10px] font-bold text-foreground min-w-0">
+                              <div className="flex items-center gap-1 text-primary truncate tracking-tight">
+                                <User className="w-3 h-3 shrink-0 opacity-80" />
+                                <span className="truncate">
+                                  A1[{facA1}], A2[{facA2}] <span className="text-muted-foreground font-normal">/</span> A3[{facA3}], A4[{facA4}]
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Bottom Row: Labs Only */}
+                            <div className="flex items-center justify-between text-[9.5px] text-muted-foreground font-mono border-t border-border/60 pt-0.5 min-w-0">
+                              <div className="flex items-center gap-1 truncate">
+                                <FlaskConical className="w-2.5 h-2.5 shrink-0 text-highlight" />
+                                <span className="truncate font-semibold text-foreground">
+                                  {labA1}, {labA2} <span className="text-muted font-normal">/</span> {labA3}, {labA4}
+                                </span>
+                              </div>
+                              {selectedTargetType !== 'class' && attendingClass && (
+                                <span className="text-primary font-bold truncate max-w-[65px] ml-auto">
+                                  {attendingClass.name.split(' ')[0]}
+                                </span>
+                              )}
+                            </div>
+                          </motion.div>
+                        </div>
+                      );
+                    }
+
                     const subjectInitials = getSubjectInitials(assignedSubject);
-                    const facultyInitials = getFacultyInitials(assignedFaculty?.name);
-                    const venueDisplay = getVenueDisplay(assignedRoom, assignedLab);
+                    const facultyInitials = getFacultyInitials(assignedFaculty);
+                    const venueDisplay = isLab
+                      ? (assignedLab ? getVenueDisplay(undefined, assignedLab) : 'Lab')
+                      : getVenueDisplay(assignedRoom, assignedLab);
 
                     return (
                       <div

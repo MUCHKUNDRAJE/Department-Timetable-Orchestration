@@ -38,6 +38,7 @@ export const SEED_FACULTY: Faculty[] = [
   {
     id: 'fac_kiran_khadare',
     name: 'Prof. Kiran Khadare',
+    nickname: 'KK',
     department: 'Artificial Intelligence & Data Science',
     designation: 'Assistant Professor',
     email: 'kiran.khadare@mits.edu',
@@ -47,6 +48,7 @@ export const SEED_FACULTY: Faculty[] = [
   {
     id: 'fac_sarah_vance',
     name: 'Dr. Sarah Vance',
+    nickname: 'SV',
     department: 'Artificial Intelligence & Data Science',
     designation: 'Professor & Dean',
     email: 'sarah.vance@mits.edu',
@@ -56,6 +58,7 @@ export const SEED_FACULTY: Faculty[] = [
   {
     id: 'fac_rajesh_raman',
     name: 'Dr. Rajesh Raman',
+    nickname: 'RR',
     department: 'Artificial Intelligence & Data Science',
     designation: 'Associate Professor & HOD',
     email: 'rajesh.raman@mits.edu',
@@ -65,6 +68,7 @@ export const SEED_FACULTY: Faculty[] = [
   {
     id: 'fac_ananya_sen',
     name: 'Prof. Ananya Sen',
+    nickname: 'AS',
     department: 'Artificial Intelligence & Data Science',
     designation: 'Assistant Professor',
     email: 'ananya.sen@mits.edu',
@@ -74,6 +78,7 @@ export const SEED_FACULTY: Faculty[] = [
   {
     id: 'fac_vikram_patel',
     name: 'Prof. Vikram Patel',
+    nickname: 'VP',
     department: 'Artificial Intelligence & Data Science',
     designation: 'Assistant Professor',
     email: 'vikram.patel@mits.edu',
@@ -83,6 +88,7 @@ export const SEED_FACULTY: Faculty[] = [
   {
     id: 'fac_priya_nair',
     name: 'Dr. Priya Nair',
+    nickname: 'PN',
     department: 'Artificial Intelligence & Data Science',
     designation: 'Associate Professor',
     email: 'priya.nair@mits.edu',
@@ -92,6 +98,7 @@ export const SEED_FACULTY: Faculty[] = [
   {
     id: 'fac_rohan_deshmukh',
     name: 'Prof. Rohan Deshmukh',
+    nickname: 'RD',
     department: 'Artificial Intelligence & Data Science',
     designation: 'Assistant Professor',
     email: 'rohan.deshmukh@mits.edu',
@@ -134,6 +141,12 @@ export const SEED_ASSIGNMENTS: Assignment[] = [
     facultyId: 'fac_vikram_patel',
     subjectId: 'subj_cs702',
     labId: 'lab_ai_robotics',
+    labBatches: [
+      { id: 'A1', facultyId: 'fac_vikram_patel', subjectId: 'subj_cs702', labId: 'lab_ai_robotics' },
+      { id: 'A2', facultyId: 'fac_rohan_deshmukh', subjectId: 'subj_cs702', labId: 'lab_data_analytics' },
+      { id: 'A3', facultyId: 'fac_kiran_khadare', subjectId: 'subj_cs704', labId: 'lab_cloud_hpc' },
+      { id: 'A4', facultyId: 'fac_priya_nair', subjectId: 'subj_cs702', labId: 'lab_ai_robotics' },
+    ],
   },
   {
     id: 'asg_4',
@@ -178,6 +191,12 @@ export const SEED_ASSIGNMENTS: Assignment[] = [
     facultyId: 'fac_rohan_deshmukh',
     subjectId: 'subj_cs702',
     labId: 'lab_ai_robotics',
+    labBatches: [
+      { id: 'A1', facultyId: 'fac_rohan_deshmukh', subjectId: 'subj_cs702', labId: 'lab_ai_robotics' },
+      { id: 'A2', facultyId: 'fac_vikram_patel', subjectId: 'subj_cs702', labId: 'lab_data_analytics' },
+      { id: 'A3', facultyId: 'fac_ananya_sen', subjectId: 'subj_cs702', labId: 'lab_cloud_hpc' },
+      { id: 'A4', facultyId: 'fac_priya_nair', subjectId: 'subj_cs702', labId: 'lab_ai_robotics' },
+    ],
   },
 
   // AIDS 5th Sem A (class_aids_5a)
