@@ -1,5 +1,16 @@
 'use client';
 
+/**
+ * store.ts — Zustand global state backed by the REST API.
+ *
+ * All mutation actions are async: they call the API first, then update
+ * local Zustand state on success. This keeps the UI reactive while the
+ * DB is the source of truth.
+ *
+ * hydrateFromApi() replaces hydrateFromStorage() and performs parallel
+ * GET requests for all 6 resource collections.
+ */
+
 import { create } from 'zustand';
 import {
   CollegeClass,
@@ -12,391 +23,332 @@ import {
   TargetType,
 } from '@/types/timetable';
 import {
-  SEED_CLASSES,
-  SEED_LABS,
-  SEED_ROOMS,
-  SEED_FACULTY,
-  SEED_SUBJECTS,
-  SEED_ASSIGNMENTS,
-} from './seed-data';
-import { generateId } from './utils';
-
-const STORAGE_KEY = 'timetable_system_v1_store';
+  classesApi,
+  labsApi,
+  roomsApi,
+  facultyApi,
+  subjectsApi,
+  assignmentsApi,
+  dataApi,
+  FullState,
+  ConflictCheckParams,
+} from './api';
+import { ConflictCheckResult } from '@/types/timetable';
 
 export interface TimetableStore {
-  // State
-  classes: CollegeClass[];
-  labs: Lab[];
-  rooms: Room[];
-  faculty: Faculty[];
-  subjects: Subject[];
+  // ─── State ─────────────────────────────────────────────────────────
+  classes:     CollegeClass[];
+  labs:        Lab[];
+  rooms:       Room[];
+  faculty:     Faculty[];
+  subjects:    Subject[];
   assignments: Assignment[];
-  isHydrated: boolean;
+  isHydrated:  boolean;
+  isFetching:  boolean;
+  activeOperation: string | null;
+  apiError:    string | null;
 
-  // Active Schedule Selection
+  // ─── Active Schedule Selection ──────────────────────────────────────
   selectedTargetType: TargetType;
-  selectedTargetId: string;
+  selectedTargetId:   string;
   setSelectedTarget: (type: TargetType, id: string) => void;
 
-  // Active Slot Editor UI State
+  // ─── Active Slot Editor UI State ────────────────────────────────────
   activeSlotEditor: {
-    isOpen: boolean;
-    day: Day;
-    startSlot: number;
-    duration: 1 | 2;
+    isOpen:       boolean;
+    day:          Day;
+    startSlot:    number;
+    duration:     1 | 2;
     assignmentId?: string;
   } | null;
-  openSlotEditor: (day: Day, startSlot: number, duration?: 1 | 2, assignmentId?: string) => void;
+  openSlotEditor:  (day: Day, startSlot: number, duration?: 1 | 2, assignmentId?: string) => void;
   closeSlotEditor: () => void;
 
-  // Assignment Mutations
-  addAssignment: (assignment: Omit<Assignment, 'id'>) => string;
-  updateAssignment: (id: string, updates: Partial<Assignment>) => void;
-  deleteAssignment: (id: string) => void;
-  clearAssignmentsForTarget: (targetType: TargetType, targetId: string) => void;
+  // ─── Hydration ──────────────────────────────────────────────────────
+  hydrateFromApi: () => Promise<void>;
+  setFetching: (isFetching: boolean, operation?: string | null) => void;
 
-  // Entity CRUD: Classes
-  addClass: (item: Omit<CollegeClass, 'id'>) => string;
-  updateClass: (id: string, updates: Partial<CollegeClass>) => void;
-  deleteClass: (id: string) => void;
+  // ─── Assignments ────────────────────────────────────────────────────
+  addAssignment:            (data: Omit<Assignment, 'id'>) => Promise<string>;
+  updateAssignment:         (id: string, updates: Partial<Assignment>) => Promise<void>;
+  deleteAssignment:         (id: string) => Promise<void>;
+  clearAssignmentsForTarget:(targetType: TargetType, targetId: string) => Promise<void>;
+  checkAssignmentConflict:  (params: ConflictCheckParams) => Promise<ConflictCheckResult>;
 
-  // Entity CRUD: Labs
-  addLab: (item: Omit<Lab, 'id'>) => string;
-  updateLab: (id: string, updates: Partial<Lab>) => void;
-  deleteLab: (id: string) => void;
+  // ─── Classes ────────────────────────────────────────────────────────
+  addClass:    (item: Omit<CollegeClass, 'id'>) => Promise<string>;
+  updateClass: (id: string, updates: Partial<CollegeClass>) => Promise<void>;
+  deleteClass: (id: string) => Promise<void>;
 
-  // Entity CRUD: Rooms
-  addRoom: (item: Omit<Room, 'id'>) => string;
-  updateRoom: (id: string, updates: Partial<Room>) => void;
-  deleteRoom: (id: string) => void;
+  // ─── Labs ───────────────────────────────────────────────────────────
+  addLab:    (item: Omit<Lab, 'id'>) => Promise<string>;
+  updateLab: (id: string, updates: Partial<Lab>) => Promise<void>;
+  deleteLab: (id: string) => Promise<void>;
 
-  // Entity CRUD: Faculty
-  addFaculty: (item: Omit<Faculty, 'id'>) => string;
-  updateFaculty: (id: string, updates: Partial<Faculty>) => void;
-  deleteFaculty: (id: string) => void;
+  // ─── Rooms ──────────────────────────────────────────────────────────
+  addRoom:    (item: Omit<Room, 'id'>) => Promise<string>;
+  updateRoom: (id: string, updates: Partial<Room>) => Promise<void>;
+  deleteRoom: (id: string) => Promise<void>;
 
-  // Entity CRUD: Subjects
-  addSubject: (item: Omit<Subject, 'id'>) => string;
-  updateSubject: (id: string, updates: Partial<Subject>) => void;
-  deleteSubject: (id: string) => void;
+  // ─── Faculty ────────────────────────────────────────────────────────
+  addFaculty:    (item: Omit<Faculty, 'id'>) => Promise<string>;
+  updateFaculty: (id: string, updates: Partial<Faculty>) => Promise<void>;
+  deleteFaculty: (id: string) => Promise<void>;
 
-  // Backup, Import & Reset
-  resetToSeedData: () => void;
-  importFullState: (state: {
-    classes: CollegeClass[];
-    labs: Lab[];
-    rooms: Room[];
-    faculty: Faculty[];
-    subjects: Subject[];
-    assignments: Assignment[];
-  }) => void;
-  hydrateFromStorage: () => void;
+  // ─── Subjects ───────────────────────────────────────────────────────
+  addSubject:    (item: Omit<Subject, 'id'>) => Promise<string>;
+  updateSubject: (id: string, updates: Partial<Subject>) => Promise<void>;
+  deleteSubject: (id: string) => Promise<void>;
+
+  // ─── Backup / Import / Reset ────────────────────────────────────────
+  resetToSeedData:  () => Promise<void>;
+  importFullState:  (state: FullState) => Promise<void>;
+  exportFullState:  () => Promise<FullState>;
 }
 
 export const useTimetableStore = create<TimetableStore>((set, get) => ({
-  classes: SEED_CLASSES,
-  labs: SEED_LABS,
-  rooms: SEED_ROOMS,
-  faculty: SEED_FACULTY,
-  subjects: SEED_SUBJECTS,
-  assignments: SEED_ASSIGNMENTS,
-  isHydrated: false,
+  classes:     [],
+  labs:        [],
+  rooms:       [],
+  faculty:     [],
+  subjects:    [],
+  assignments: [],
+  isHydrated:  false,
+  isFetching:  false,
+  activeOperation: null,
+  apiError:    null,
 
   selectedTargetType: 'class',
-  selectedTargetId: SEED_CLASSES[0]?.id || '',
+  selectedTargetId:   '',
 
-  setSelectedTarget: (type, id) => {
-    set({ selectedTargetType: type, selectedTargetId: id });
-  },
+  setSelectedTarget: (type, id) => set({ selectedTargetType: type, selectedTargetId: id }),
 
   activeSlotEditor: null,
 
   openSlotEditor: (day, startSlot, duration = 1, assignmentId) => {
-    set({
-      activeSlotEditor: {
-        isOpen: true,
-        day,
-        startSlot,
-        duration,
-        assignmentId,
-      },
-    });
+    set({ activeSlotEditor: { isOpen: true, day, startSlot, duration, assignmentId } });
   },
 
-  closeSlotEditor: () => {
-    set({ activeSlotEditor: null });
+  closeSlotEditor: () => set({ activeSlotEditor: null }),
+
+  setFetching: (isFetching, activeOperation = null) => set({ isFetching, activeOperation }),
+
+  // ─── Hydration ───────────────────────────────────────────────────────
+  hydrateFromApi: async () => {
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('timetable_token');
+      if (!token) {
+        set({ isHydrated: true, isFetching: false, apiError: null });
+        return;
+      }
+    }
+    set({ isFetching: true, activeOperation: 'Syncing institutional data...' });
+    try {
+      const [classes, labs, rooms, faculty, subjects, assignments] = await Promise.all([
+        classesApi.list(),
+        labsApi.list(),
+        roomsApi.list(),
+        facultyApi.list(),
+        subjectsApi.list(),
+        assignmentsApi.list(),
+      ]);
+      set({
+        classes,
+        labs,
+        rooms,
+        faculty,
+        subjects,
+        assignments,
+        isHydrated:         true,
+        isFetching:         false,
+        activeOperation:    null,
+        apiError:           null,
+        selectedTargetType: 'class',
+        selectedTargetId:   classes[0]?.id || '',
+      });
+    } catch (err: any) {
+      console.error('[Store] hydrateFromApi failed:', err.message);
+      if (!err.message?.toLowerCase().includes('token') && !err.message?.toLowerCase().includes('auth')) {
+        set({ isHydrated: true, isFetching: false, activeOperation: null, apiError: err.message });
+      } else {
+        set({ isHydrated: true, isFetching: false, activeOperation: null, apiError: null });
+      }
+    }
   },
 
-  addAssignment: (assignmentData) => {
-    const id = generateId('asg');
-    const newAssignment: Assignment = { ...assignmentData, id };
-    set((state) => {
-      const updated = [...state.assignments, newAssignment];
-      persistState({ ...state, assignments: updated });
-      return { assignments: updated };
-    });
-    return id;
+  // ─── Assignments ─────────────────────────────────────────────────────
+  addAssignment: async (data) => {
+    const created = await assignmentsApi.create(data);
+    set((s) => ({ assignments: [...s.assignments, created] }));
+    return created.id;
   },
 
-  updateAssignment: (id, updates) => {
-    set((state) => {
-      const updated = state.assignments.map((a) => (a.id === id ? { ...a, ...updates } : a));
-      persistState({ ...state, assignments: updated });
-      return { assignments: updated };
-    });
+  updateAssignment: async (id, updates) => {
+    const current = get().assignments.find((a) => a.id === id);
+    if (!current) return;
+    const updated = await assignmentsApi.update(id, { ...current, ...updates });
+    set((s) => ({ assignments: s.assignments.map((a) => (a.id === id ? updated : a)) }));
   },
 
-  deleteAssignment: (id) => {
-    set((state) => {
-      const updated = state.assignments.filter((a) => a.id !== id);
-      persistState({ ...state, assignments: updated });
-      return { assignments: updated };
-    });
+  deleteAssignment: async (id) => {
+    await assignmentsApi.delete(id);
+    set((s) => ({ assignments: s.assignments.filter((a) => a.id !== id) }));
   },
 
-  clearAssignmentsForTarget: (targetType, targetId) => {
-    set((state) => {
-      const updated = state.assignments.filter(
+  clearAssignmentsForTarget: async (targetType, targetId) => {
+    await assignmentsApi.clearForTarget(targetType, targetId);
+    set((s) => ({
+      assignments: s.assignments.filter(
         (a) => !(a.targetType === targetType && a.targetId === targetId)
-      );
-      persistState({ ...state, assignments: updated });
-      return { assignments: updated };
-    });
+      ),
+    }));
   },
 
-  // Classes
-  addClass: (item) => {
-    const id = generateId('class');
-    set((state) => {
-      const updated = [...state.classes, { ...item, id }];
-      persistState({ ...state, classes: updated });
-      return { classes: updated };
-    });
-    return id;
+  checkAssignmentConflict: async (params) => {
+    return assignmentsApi.checkConflict(params);
   },
-  updateClass: (id, updates) => {
-    set((state) => {
-      const updated = state.classes.map((c) => (c.id === id ? { ...c, ...updates } : c));
-      persistState({ ...state, classes: updated });
-      return { classes: updated };
-    });
+
+  // ─── Classes ─────────────────────────────────────────────────────────
+  addClass: async (item) => {
+    const created = await classesApi.create(item);
+    set((s) => ({ classes: [...s.classes, created] }));
+    return created.id;
   },
-  deleteClass: (id) => {
-    set((state) => {
-      const updatedClasses = state.classes.filter((c) => c.id !== id);
-      const updatedAssignments = state.assignments.filter(
-        (a) => !(a.targetType === 'class' && a.targetId === id) && a.classId !== id
-      );
-      persistState({ ...state, classes: updatedClasses, assignments: updatedAssignments });
+
+  updateClass: async (id, updates) => {
+    const current = get().classes.find((c) => c.id === id);
+    if (!current) return;
+    const updated = await classesApi.update(id, { ...current, ...updates });
+    set((s) => ({ classes: s.classes.map((c) => (c.id === id ? updated : c)) }));
+  },
+
+  deleteClass: async (id) => {
+    await classesApi.delete(id);
+    set((s) => {
+      const classes = s.classes.filter((c) => c.id !== id);
       return {
-        classes: updatedClasses,
-        assignments: updatedAssignments,
+        classes,
+        assignments: s.assignments.filter(
+          (a) => !(a.targetType === 'class' && a.targetId === id) && a.classId !== id
+        ),
         selectedTargetId:
-          state.selectedTargetId === id ? updatedClasses[0]?.id || '' : state.selectedTargetId,
+          s.selectedTargetId === id ? (classes[0]?.id || '') : s.selectedTargetId,
       };
     });
   },
 
-  // Labs
-  addLab: (item) => {
-    const id = generateId('lab');
-    set((state) => {
-      const updated = [...state.labs, { ...item, id }];
-      persistState({ ...state, labs: updated });
-      return { labs: updated };
-    });
-    return id;
+  // ─── Labs ────────────────────────────────────────────────────────────
+  addLab: async (item) => {
+    const created = await labsApi.create(item);
+    set((s) => ({ labs: [...s.labs, created] }));
+    return created.id;
   },
-  updateLab: (id, updates) => {
-    set((state) => {
-      const updated = state.labs.map((l) => (l.id === id ? { ...l, ...updates } : l));
-      persistState({ ...state, labs: updated });
-      return { labs: updated };
-    });
+
+  updateLab: async (id, updates) => {
+    const current = get().labs.find((l) => l.id === id);
+    if (!current) return;
+    const updated = await labsApi.update(id, { ...current, ...updates });
+    set((s) => ({ labs: s.labs.map((l) => (l.id === id ? updated : l)) }));
   },
-  deleteLab: (id) => {
-    set((state) => {
-      const updatedLabs = state.labs.filter((l) => l.id !== id);
-      const updatedAssignments = state.assignments.filter(
+
+  deleteLab: async (id) => {
+    await labsApi.delete(id);
+    set((s) => ({
+      labs: s.labs.filter((l) => l.id !== id),
+      assignments: s.assignments.filter(
         (a) => !(a.targetType === 'lab' && a.targetId === id) && a.labId !== id
-      );
-      persistState({ ...state, labs: updatedLabs, assignments: updatedAssignments });
-      return { labs: updatedLabs, assignments: updatedAssignments };
-    });
+      ),
+    }));
   },
 
-  // Rooms
-  addRoom: (item) => {
-    const id = generateId('room');
-    set((state) => {
-      const updated = [...state.rooms, { ...item, id }];
-      persistState({ ...state, rooms: updated });
-      return { rooms: updated };
-    });
-    return id;
+  // ─── Rooms ───────────────────────────────────────────────────────────
+  addRoom: async (item) => {
+    const created = await roomsApi.create(item);
+    set((s) => ({ rooms: [...s.rooms, created] }));
+    return created.id;
   },
-  updateRoom: (id, updates) => {
-    set((state) => {
-      const updated = state.rooms.map((r) => (r.id === id ? { ...r, ...updates } : r));
-      persistState({ ...state, rooms: updated });
-      return { rooms: updated };
-    });
+
+  updateRoom: async (id, updates) => {
+    const current = get().rooms.find((r) => r.id === id);
+    if (!current) return;
+    const updated = await roomsApi.update(id, { ...current, ...updates });
+    set((s) => ({ rooms: s.rooms.map((r) => (r.id === id ? updated : r)) }));
   },
-  deleteRoom: (id) => {
-    set((state) => {
-      const updatedRooms = state.rooms.filter((r) => r.id !== id);
-      const updatedAssignments = state.assignments.filter(
+
+  deleteRoom: async (id) => {
+    await roomsApi.delete(id);
+    set((s) => ({
+      rooms: s.rooms.filter((r) => r.id !== id),
+      assignments: s.assignments.filter(
         (a) => !(a.targetType === 'room' && a.targetId === id) && a.roomId !== id
-      );
-      persistState({ ...state, rooms: updatedRooms, assignments: updatedAssignments });
-      return { rooms: updatedRooms, assignments: updatedAssignments };
-    });
+      ),
+    }));
   },
 
-  // Faculty
-  addFaculty: (item) => {
-    const id = generateId('fac');
-    set((state) => {
-      const updated = [...state.faculty, { ...item, id }];
-      persistState({ ...state, faculty: updated });
-      return { faculty: updated };
-    });
-    return id;
-  },
-  updateFaculty: (id, updates) => {
-    set((state) => {
-      const updated = state.faculty.map((f) => (f.id === id ? { ...f, ...updates } : f));
-      persistState({ ...state, faculty: updated });
-      return { faculty: updated };
-    });
-  },
-  deleteFaculty: (id) => {
-    set((state) => {
-      const updatedFaculty = state.faculty.filter((f) => f.id !== id);
-      const updatedAssignments = state.assignments.filter((a) => a.facultyId !== id);
-      persistState({ ...state, faculty: updatedFaculty, assignments: updatedAssignments });
-      return { faculty: updatedFaculty, assignments: updatedAssignments };
-    });
+  // ─── Faculty ─────────────────────────────────────────────────────────
+  addFaculty: async (item) => {
+    const created = await facultyApi.create(item);
+    set((s) => ({ faculty: [...s.faculty, created] }));
+    return created.id;
   },
 
-  // Subjects
-  addSubject: (item) => {
-    const id = generateId('subj');
-    set((state) => {
-      const updated = [...state.subjects, { ...item, id }];
-      persistState({ ...state, subjects: updated });
-      return { subjects: updated };
-    });
-    return id;
+  updateFaculty: async (id, updates) => {
+    const current = get().faculty.find((f) => f.id === id);
+    if (!current) return;
+    const updated = await facultyApi.update(id, { ...current, ...updates });
+    set((s) => ({ faculty: s.faculty.map((f) => (f.id === id ? updated : f)) }));
   },
-  updateSubject: (id, updates) => {
-    set((state) => {
-      const updated = state.subjects.map((s) => (s.id === id ? { ...s, ...updates } : s));
-      persistState({ ...state, subjects: updated });
-      return { subjects: updated };
-    });
+
+  deleteFaculty: async (id) => {
+    await facultyApi.delete(id);
+    set((s) => ({
+      faculty:     s.faculty.filter((f) => f.id !== id),
+      assignments: s.assignments.filter((a) => a.facultyId !== id),
+    }));
   },
-  deleteSubject: (id) => {
-    set((state) => {
-      const updatedSubjects = state.subjects.filter((s) => s.id !== id);
-      const updatedAssignments = state.assignments.filter((a) => a.subjectId !== id);
-      const updatedFaculty = state.faculty.map((f) => ({
+
+  // ─── Subjects ────────────────────────────────────────────────────────
+  addSubject: async (item) => {
+    const created = await subjectsApi.create(item);
+    set((s) => ({ subjects: [...s.subjects, created] }));
+    return created.id;
+  },
+
+  updateSubject: async (id, updates) => {
+    const current = get().subjects.find((s) => s.id === id);
+    if (!current) return;
+    const updated = await subjectsApi.update(id, { ...current, ...updates });
+    set((s) => ({ subjects: s.subjects.map((sub) => (sub.id === id ? updated : sub)) }));
+  },
+
+  deleteSubject: async (id) => {
+    await subjectsApi.delete(id);
+    set((s) => ({
+      subjects:    s.subjects.filter((sub) => sub.id !== id),
+      assignments: s.assignments.filter((a) => a.subjectId !== id),
+      faculty:     s.faculty.map((f) => ({
         ...f,
         subjectIds: f.subjectIds.filter((sid) => sid !== id),
-      }));
-      persistState({
-        ...state,
-        subjects: updatedSubjects,
-        faculty: updatedFaculty,
-        assignments: updatedAssignments,
-      });
-      return {
-        subjects: updatedSubjects,
-        faculty: updatedFaculty,
-        assignments: updatedAssignments,
-      };
-    });
+      })),
+    }));
   },
 
-  resetToSeedData: () => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem(STORAGE_KEY);
-    }
+  // ─── Reset / Import / Export ─────────────────────────────────────────
+  resetToSeedData: async () => {
+    await dataApi.reset();
+    await get().hydrateFromApi();
+  },
+
+  importFullState: async (state) => {
+    await dataApi.import(state);
     set({
-      classes: SEED_CLASSES,
-      labs: SEED_LABS,
-      rooms: SEED_ROOMS,
-      faculty: SEED_FACULTY,
-      subjects: SEED_SUBJECTS,
-      assignments: SEED_ASSIGNMENTS,
+      ...state,
       selectedTargetType: 'class',
-      selectedTargetId: SEED_CLASSES[0]?.id || '',
+      selectedTargetId:   state.classes[0]?.id || '',
     });
   },
 
-  importFullState: (newState) => {
-    set({
-      classes: newState.classes,
-      labs: newState.labs,
-      rooms: newState.rooms,
-      faculty: newState.faculty,
-      subjects: newState.subjects,
-      assignments: newState.assignments,
-      selectedTargetType: 'class',
-      selectedTargetId: newState.classes[0]?.id || '',
-    });
-    persistState({
-      ...get(),
-      ...newState,
-    });
-  },
-
-  hydrateFromStorage: () => {
-    if (typeof window === 'undefined') return;
-    try {
-      const item = localStorage.getItem(STORAGE_KEY);
-      if (item) {
-        const parsed = JSON.parse(item);
-        set({
-          classes: parsed.classes || SEED_CLASSES,
-          labs: parsed.labs || SEED_LABS,
-          rooms: parsed.rooms || SEED_ROOMS,
-          faculty: parsed.faculty || SEED_FACULTY,
-          subjects: parsed.subjects || SEED_SUBJECTS,
-          assignments: parsed.assignments || SEED_ASSIGNMENTS,
-          isHydrated: true,
-        });
-      } else {
-        set({ isHydrated: true });
-      }
-    } catch {
-      set({ isHydrated: true });
-    }
+  exportFullState: async () => {
+    return dataApi.export();
   },
 }));
-
-function persistState(state: {
-  classes: CollegeClass[];
-  labs: Lab[];
-  rooms: Room[];
-  faculty: Faculty[];
-  subjects: Subject[];
-  assignments: Assignment[];
-}) {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        classes: state.classes,
-        labs: state.labs,
-        rooms: state.rooms,
-        faculty: state.faculty,
-        subjects: state.subjects,
-        assignments: state.assignments,
-      })
-    );
-  } catch (err) {
-    console.error('Failed to persist timetable store in localStorage', err);
-  }
-}

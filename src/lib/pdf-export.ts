@@ -93,6 +93,17 @@ export async function exportElementToPdf(
       pdf.setFillColor(255, 255, 255);
       pdf.rect(0, 0, pageWidth, margin, 'F');
       pdf.rect(0, pageHeight - margin, pageWidth, margin, 'F');
+
+      // PDF Watermark Footer
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(8);
+      pdf.setTextColor(140, 145, 160);
+      pdf.text(
+        'Timetable Allocator · Created by Muchkundraje Thote',
+        pageWidth / 2,
+        pageHeight - 3.5,
+        { align: 'center' }
+      );
     }
 
     pdf.save(`${filename}.pdf`);
@@ -142,6 +153,17 @@ export async function exportMultipleElementsToPdf(
         pdf.setFillColor(255, 255, 255);
         pdf.rect(0, 0, pageWidth, margin, 'F');
         pdf.rect(0, pageHeight - margin, pageWidth, margin, 'F');
+
+        // PDF Watermark Footer
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(8);
+        pdf.setTextColor(140, 145, 160);
+        pdf.text(
+          'Timetable Allocator · Created by Muchkundraje Thote',
+          pageWidth / 2,
+          pageHeight - 3.5,
+          { align: 'center' }
+        );
       }
     }
 

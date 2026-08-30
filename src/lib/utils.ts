@@ -85,17 +85,14 @@ export function getSubjectInitials(
 }
 
 /**
- * Extracts clean full room/lab identifier (e.g., "EL-202", "EL-301", "EL-002")
+ * Returns the full room or lab name (e.g., "EL-202 (Smart Lecture Hall)")
  */
 export function getVenueDisplay(room?: { name: string }, lab?: { name: string }): string {
-  if (lab?.name) {
-    const match = lab.name.match(/\(([^)]+)\)/);
-    if (match) return match[1]; // e.g. "EL-002" from "AI & Robotics Lab (EL-002)"
-    return lab.name.split(' ')[0];
-  }
   if (room?.name) {
-    const match = room.name.match(/^([A-Z0-9-]+)/i);
-    return match ? match[1] : room.name; // e.g. "EL-301" from "EL-301 (Smart Lecture Hall)"
+    return room.name;
+  }
+  if (lab?.name) {
+    return lab.name;
   }
   return 'Room';
 }

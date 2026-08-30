@@ -185,6 +185,9 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
                   {TIME_SLOTS.map((slot) => {
                     const assignment = getAssignmentAt(day, slot.id);
                     const isCovered = isSlotCoveredByPreviousLab(day, slot.id);
+                    console.log(
+                    TIME_SLOTS
+                    )
 
                     if (isCovered) return null;
 
@@ -220,12 +223,7 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
                         const getCleanLabName = (labId?: string) => {
                           if (labId) {
                             const l = labs.find((item) => item.id === labId);
-                            if (l) {
-                              return l.name
-                                .replace(/Laboratory/gi, 'Lab')
-                                .replace(/Artificial Intelligence & Data Science/gi, 'AIDS')
-                                .trim();
-                            }
+                            if (l) return l.name;
                           }
                           return 'Lab';
                         };
@@ -256,8 +254,8 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
                                 A1[{facA1}], A2[{facA2}] <span className="text-slate-400 font-normal">/</span> A3[{facA3}], A4[{facA4}]
                               </div>
 
-                              {/* Labs */}
-                              <div className="text-[8px] text-slate-600 font-medium leading-none">
+                              {/* Full Labs */}
+                              <div className="text-[8px] text-slate-700 font-semibold leading-tight px-1">
                                 {labA1}, {labA2} <span className="text-slate-400 font-normal">/</span> {labA3}, {labA4}
                               </div>
                             </div>
@@ -270,12 +268,13 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
                       const room = rooms.find((r) => r.id === assignment.roomId);
                       const lab = labs.find((l) => l.id === assignment.labId);
                       const cls = classes.find((c) => c.id === assignment.classId);
+                      
 
                       const subjectInitials = getSubjectInitials(subj);
                       const facultyInitials = getFacultyInitials(fac);
                       const venueDisplay = isLab
-                        ? (lab ? getVenueDisplay(undefined, lab) : 'Lab')
-                        : getVenueDisplay(room, lab);
+                        ? (lab?.name || 'Lab')
+                        : (room?.name || lab?.name || 'Room');
 
                       return (
                         <td
@@ -300,19 +299,19 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
                               )}
                             </div>
 
-                            {/* Faculty Initials Badge + Room No */}
-                            <div className="flex items-center justify-center gap-1.5 text-[9.5px] text-slate-800 font-mono leading-none">
-                              <span className="inline-flex items-center justify-center px-1.5 py-0.5 rounded bg-white text-indigo-950 font-bold border border-slate-300 shadow-xs text-[9px] leading-none">
+                            {/* Faculty Initials Badge + Full Room Name */}
+                            <div className="flex items-center justify-center gap-1 text-[9px] text-slate-800 font-mono leading-tight px-0.5 flex-wrap">
+                              <span className="inline-flex items-center justify-center px-1.5 py-0.5 rounded bg-white text-indigo-950 font-bold border border-slate-300 shadow-xs text-[8.5px] leading-none shrink-0">
                                 {facultyInitials}
                               </span>
-                              <span className="text-slate-400 font-normal leading-none">•</span>
-                              <span className="text-slate-800 font-bold leading-none">{venueDisplay}</span>
+                              <span className="text-slate-400 font-normal leading-none shrink-0">•</span>
+                              <span className="text-slate-800 font-bold leading-tight break-words text-center">{venueDisplay}</span>
                             </div>
 
                             {/* Attending class if not UG mode */}
                             {mode !== 'ug' && cls?.name && (
                               <div className="text-[8.5px] text-slate-600 font-medium leading-none">
-                                {cls.name.split(' ')[0]}
+                                {cls.name}
                               </div>
                             )}
 
@@ -320,6 +319,11 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
                             {mode === 'ug' && subj?.code && (
                               <div className="text-[8px] text-slate-500 font-medium leading-none">
                                 {subj.code}
+                              </div>
+                            )}
+                             {mode !== 'ug' && cls?.name && (
+                              <div className="text-[8px] text-slate-500 font-medium leading-none">
+                                {cls.name}
                               </div>
                             )}
                           </div>
@@ -492,6 +496,11 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
             <span className="font-bold text-[11px]">{INSTITUTION_INFO.deanName}</span>
             <span className="block text-[9px] text-slate-600 font-normal">Dean of Academic Affairs</span>
           </div>
+        </div>
+
+        {/* Watermark Footer */}
+        <div className="pt-3 text-center text-[8.5px] text-slate-400 font-mono select-none border-t border-slate-200 mt-2">
+          Timetable Allocator • Created by Muchkundraje Thote
         </div>
       </div>
     );

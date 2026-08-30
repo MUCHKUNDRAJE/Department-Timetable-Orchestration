@@ -25,6 +25,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Drawer } from '@/components/ui/Drawer';
 import { Modal } from '@/components/ui/Modal';
+import { toast } from '@/lib/toast';
 import { calculateFacultyAllocatedHours } from '@/lib/conflict-checker';
 import { cn, getFacultyInitials } from '@/lib/utils';
 
@@ -75,6 +76,12 @@ export function DataManagementStudio() {
 
   const importFullState = useTimetableStore((s) => s.importFullState);
   const resetToSeedData = useTimetableStore((s) => s.resetToSeedData);
+  const exportFullState = useTimetableStore((s) => s.exportFullState);
+
+  // Async UI state
+  const [isSaving, setIsSaving]       = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [apiError, setApiError]       = useState<string | null>(null);
 
   // Form Fields State
   const [formData, setFormData] = useState<any>({});
@@ -132,63 +139,96 @@ export function DataManagementStudio() {
     setIsDrawerOpen(true);
   };
 
-  const handleFormSubmit = (e: React.FormEvent) => {
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingItem) {
-      if (activeTab === 'classes') updateClass(editingItem.id, formData);
-      if (activeTab === 'labs') updateLab(editingItem.id, formData);
-      if (activeTab === 'rooms') updateRoom(editingItem.id, formData);
-      if (activeTab === 'faculty') updateFaculty(editingItem.id, formData);
-      if (activeTab === 'subjects') updateSubject(editingItem.id, formData);
-    } else {
-      if (activeTab === 'classes') addClass(formData);
-      if (activeTab === 'labs') addLab(formData);
-      if (activeTab === 'rooms') addRoom(formData);
-      if (activeTab === 'faculty') addFaculty(formData);
-      if (activeTab === 'subjects') addSubject(formData);
+    setIsSaving(true);
+    setApiError(null);
+    const itemName = formData.name || formData.code || 'Record';
+    try {
+      if (editingItem) {
+        if (activeTab === 'classes') await updateClass(editingItem.id, formData);
+        if (activeTab === 'labs')    await updateLab(editingItem.id, formData);
+        if (activeTab === 'rooms')   await updateRoom(editingItem.id, formData);
+        if (activeTab === 'faculty') await updateFaculty(editingItem.id, formData);
+        if (activeTab === 'subjects') await updateSubject(editingItem.id, formData);
+        toast.success('Record Updated', `${itemName} has been updated in database.`);
+      } else {
+        if (activeTab === 'classes') await addClass(formData);
+        if (activeTab === 'labs')    await addLab(formData);
+        if (activeTab === 'rooms')   await addRoom(formData);
+        if (activeTab === 'faculty') await addFaculty(formData);
+        if (activeTab === 'subjects') await addSubject(formData);
+        toast.success('Record Created', `${itemName} has been added to database.`);
+      }
+      setIsDrawerOpen(false);
+    } catch (err: any) {
+      const msg = err.message || 'Failed to save. Is the backend running?';
+      setApiError(msg);
+      toast.error('Save Failed', msg);
+    } finally {
+      setIsSaving(false);
     }
-    setIsDrawerOpen(false);
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!deleteCandidate) return;
-    const { id, type } = deleteCandidate;
-    if (type === 'classes') deleteClass(id);
-    if (type === 'labs') deleteLab(id);
-    if (type === 'rooms') deleteRoom(id);
-    if (type === 'faculty') deleteFaculty(id);
-    if (type === 'subjects') deleteSubject(id);
-    setDeleteCandidate(null);
+    const { id, type, name } = deleteCandidate;
+    setIsSaving(true);
+    setApiError(null);
+    try {
+      if (type === 'classes')  await deleteClass(id);
+      if (type === 'labs')     await deleteLab(id);
+      if (type === 'rooms')    await deleteRoom(id);
+      if (type === 'faculty')  await deleteFaculty(id);
+      if (type === 'subjects') await deleteSubject(id);
+      toast.info('Record Deleted', `${name} was removed from the database.`);
+      setDeleteCandidate(null);
+    } catch (err: any) {
+      const msg = err.message || 'Failed to delete. Is the backend running?';
+      setApiError(msg);
+      toast.error('Delete Failed', msg);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  // JSON Export / Backup
-  const handleExportBackup = () => {
-    const backup = { classes, labs, rooms, faculty, subjects, assignments };
-    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Timetable_System_Backup_${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+  // JSON Export — calls GET /api/data/export
+  const handleExportBackup = async () => {
+    try {
+      const backup = await exportFullState();
+      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Timetable_System_Backup_${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Backup Exported', 'Full institutional timetable JSON downloaded.');
+    } catch (err: any) {
+      const msg = err.message || 'Export failed. Is the backend running?';
+      setApiError(msg);
+      toast.error('Export Failed', msg);
+    }
   };
 
-  // JSON Import
+  // JSON Import — calls POST /api/data/import
   const handleImportBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
         const parsed = JSON.parse(event.target?.result as string);
         if (parsed.classes && parsed.faculty && parsed.assignments) {
-          importFullState(parsed);
-          alert('Institutional timetable database imported successfully!');
+          await importFullState(parsed);
+          toast.success('Database Imported', 'Successfully imported institutional classes, rooms, faculty, and schedule.');
         } else {
-          alert('Invalid timetable JSON schema.');
+          toast.warning('Invalid Format', 'JSON schema does not match required timetable structure.');
         }
-      } catch (err) {
-        alert('Failed to parse JSON file.');
+      } catch (err: any) {
+        const msg = err.message || 'Import failed. Check the file format and backend.';
+        setApiError(msg);
+        toast.error('Import Failed', msg);
       }
     };
     reader.readAsText(file);
@@ -205,6 +245,21 @@ export function DataManagementStudio() {
 
   return (
     <div className="space-y-6">
+      {/* API Error Banner */}
+      {apiError && (
+        <div className="flex items-center gap-3 px-4 py-3 bg-rose-50 border border-rose-200 rounded-2xl text-rose-700 text-sm font-medium">
+          <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
+          <span>{apiError}</span>
+          <button
+            onClick={() => setApiError(null)}
+            className="ml-auto text-rose-500 hover:text-rose-700 font-bold text-lg leading-none"
+            aria-label="Dismiss error"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       {/* Top Toolbar: Tabs, Search & Backup */}
       <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
         {/* Navigation Tabs */}
@@ -925,11 +980,15 @@ export function DataManagementStudio() {
               variant="ghost"
               size="md"
               onClick={() => setIsDrawerOpen(false)}
+              disabled={isSaving}
             >
               Cancel
             </Button>
-            <Button type="submit" variant="primary" size="md">
-              {editingItem ? 'Save Updates' : 'Create Record'}
+            <Button type="submit" variant="primary" size="md" disabled={isSaving} className="gap-2">
+              {isSaving ? (
+                <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+              ) : null}
+              {isSaving ? 'Saving...' : editingItem ? 'Save Updates' : 'Create Record'}
             </Button>
           </div>
         </form>
@@ -952,11 +1011,14 @@ export function DataManagementStudio() {
           </div>
 
           <div className="flex items-center justify-end gap-2">
-            <Button variant="ghost" size="md" onClick={() => setDeleteCandidate(null)}>
+            <Button variant="ghost" size="md" onClick={() => setDeleteCandidate(null)} disabled={isSaving}>
               Cancel
             </Button>
-            <Button variant="danger" size="md" onClick={handleConfirmDelete}>
-              Delete Record
+            <Button variant="danger" size="md" onClick={handleConfirmDelete} disabled={isSaving} className="gap-2">
+              {isSaving ? (
+                <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+              ) : null}
+              {isSaving ? 'Deleting...' : 'Delete Record'}
             </Button>
           </div>
         </div>
