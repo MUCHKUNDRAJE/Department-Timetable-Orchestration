@@ -130,12 +130,7 @@ export function ScheduleGrid() {
                       const getCleanLabName = (labId?: string) => {
                         if (labId) {
                           const l = labs.find((item) => item.id === labId);
-                          if (l) {
-                            return l.name
-                              .replace(/Laboratory/gi, 'Lab')
-                              .replace(/Artificial Intelligence & Data Science/gi, 'AIDS')
-                              .trim();
-                          }
+                          if (l) return l.name;
                         }
                         return 'Lab';
                       };

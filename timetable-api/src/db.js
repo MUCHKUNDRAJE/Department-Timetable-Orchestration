@@ -11,7 +11,9 @@ const pool = new Pool({
   ssl: isCloudDb ? { rejectUnauthorized: false } : false,
   max: 20,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000,
+  connectionTimeoutMillis: 10000,
+  statement_timeout: 15000,
+  keepAlive: true,
 });
 
 pool.on('error', (err) => {

@@ -4,6 +4,10 @@ const jwt = require('jsonwebtoken');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'timetable-orchestration-super-secret-key-2025';
 
+if (process.env.NODE_ENV === 'production' && (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 16)) {
+  console.warn('⚠️ [SECURITY WARNING] Insecure or missing JWT_SECRET in production! Please set a strong JWT_SECRET in your environment variables.');
+}
+
 /**
  * Middleware to require valid JWT Bearer token on protected routes.
  */

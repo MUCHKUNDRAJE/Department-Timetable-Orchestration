@@ -65,7 +65,7 @@ export function TargetSelector() {
           className={cn(
             'flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all',
             selectedTargetType === 'class'
-              ? 'bg-surface text-primary shadow-sm border border-border font-bold'
+              ? 'bg-blue-600 text-white shadow-sm border border-border font-bold'
               : 'text-muted hover:text-foreground'
           )}
         >
@@ -78,7 +78,7 @@ export function TargetSelector() {
           className={cn(
             'flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all',
             selectedTargetType === 'lab'
-              ? 'bg-surface text-highlight shadow-sm border border-border font-bold'
+              ? 'bg-red-500 text-white  shadow-sm border border-border font-bold'
               : 'text-muted hover:text-foreground'
           )}
         >
@@ -91,7 +91,7 @@ export function TargetSelector() {
           className={cn(
             'flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all',
             selectedTargetType === 'room'
-              ? 'bg-surface text-primary shadow-sm border border-border font-bold'
+              ? 'bg-green-600 text-white shadow-sm border border-border font-bold'
               : 'text-muted hover:text-foreground'
           )}
         >
