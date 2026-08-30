@@ -16,7 +16,7 @@ import type {
 import type { AuthResponse, AuthUser, LoginPayload, SignupPayload } from '@/types/auth';
 
 // ─── Base Client ──────────────────────────────────────────────────────
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL ;
 
 export const apiClient = axios.create({
   baseURL: BASE_URL,
