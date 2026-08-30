@@ -26,7 +26,7 @@ export const SUBJECT_PALETTE = [
 
 export const INSTITUTION_INFO = {
   collegeName: 'YESHWANTRAO CHAVAN COLLEGE OF ENGINEERING',
-  department: 'Department of Artificial Intelligence & Data Science',
+  department: 'Department Of Computer Technology',
   academicYear: '2026 - 2027 (Odd Semester)',
   effectiveDate: 'August 10, 2026',
   deanName: 'Dr. Sarah Vance, Ph.D.',

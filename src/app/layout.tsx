@@ -10,6 +10,7 @@ export const metadata: Metadata = {
   title: 'Timetable Allocation System | Department Scheduling Studio',
   description:
     'Institutional class, laboratory, classroom, and faculty timetable scheduling engine with real-time conflict validation and multi-page PDF generation.',
+    icons:"/image.png"
 };
 
 export default function RootLayout({
@@ -42,7 +43,7 @@ export default function RootLayout({
               <div className="fixed bottom-3 right-3 z-30 pointer-events-none select-none no-print">
                 <div className="px-2.5 py-1 rounded-full bg-surface/85 backdrop-blur-md border border-border text-[10px] font-mono text-muted-foreground shadow-xs flex items-center gap-1.5 opacity-75 hover:opacity-100 transition-opacity pointer-events-auto">
                   <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                  <span>Timetable Allocator</span>
+                  <span>Slotify</span>
                   <span className="opacity-40">|</span>
                   <span>Created by <strong className="text-foreground font-semibold">Muchkundraje Thote</strong></span>
                 </div>

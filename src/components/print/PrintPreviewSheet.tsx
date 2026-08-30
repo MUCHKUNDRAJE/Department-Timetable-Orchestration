@@ -499,9 +499,9 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
         </div>
 
         {/* Watermark Footer */}
-        <div className="pt-3 text-center text-[8.5px] text-slate-400 font-mono select-none border-t border-slate-200 mt-2">
+       {/*} <div className="pt-3 text-center text-[8.5px] text-slate-400 font-mono select-none border-t border-slate-200 mt-2">
           Timetable Allocator • Created by Muchkundraje Thote
-        </div>
+        </div>*/}
       </div>
     );
   }

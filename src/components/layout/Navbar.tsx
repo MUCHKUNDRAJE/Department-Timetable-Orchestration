@@ -9,6 +9,7 @@ import { useAuthStore } from '@/lib/auth-store';
 import { INSTITUTION_INFO } from '@/lib/constants';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
+import Image from 'next/image';
 
 export function Navbar() {
   const pathname = usePathname();
@@ -56,16 +57,16 @@ export function Navbar() {
           {/* Institution Brand */}
           <Link href={isAuthenticated ? '/select' : '/login'} className="flex items-center gap-3 group">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white shadow-sm group-hover:scale-105 transition-transform">
-              <Building2 className="w-5 h-5" />
+              {/* <Building2 className="w-5 h-5" />*/}
+              <Image src="/image.png" alt="Logo" width={50} height={50} />
+
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-sm font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
-                  TIMETABLE ALLOCATION
+                <span className="text-lg font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+                  Slotify
                 </span>
-                <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-highlight/15 text-highlight">
-                  Pro
-                </span>
+                
               </div>
               <p className="text-[11px] text-muted font-medium truncate max-w-[280px] sm:max-w-none">
                 {INSTITUTION_INFO.department}
