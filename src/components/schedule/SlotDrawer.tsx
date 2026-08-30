@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useTimetableStore } from '@/lib/store';
 import { TIME_SLOTS } from '@/lib/constants';
+import { toast } from '@/lib/toast';
 import { Drawer } from '@/components/ui/Drawer';
 import { Button } from '@/components/ui/Button';
 import {
@@ -613,9 +614,15 @@ export function SlotDrawer() {
         }
       }
 
+      toast.success(
+        assignmentId ? 'Session Updated' : 'Session Scheduled',
+        `${day} • Slot ${startSlot + 1} (${duration === 2 ? '2-Hour Lab' : 'Lecture'}) assigned successfully.`
+      );
       closeSlotEditor();
     } catch (err: any) {
-      setSaveError(err.message || 'Failed to save assignment. Is the backend running?');
+      const msg = err.message || 'Failed to save assignment. Is the backend running?';
+      setSaveError(msg);
+      toast.error('Schedule Action Failed', msg);
     } finally {
       setIsSaving(false);
     }
@@ -626,9 +633,12 @@ export function SlotDrawer() {
       setIsSaving(true);
       try {
         await deleteAssignment(assignmentId);
+        toast.info('Session Removed', `${day} • Slot ${startSlot + 1} cleared from timetable.`);
         closeSlotEditor();
       } catch (err: any) {
-        setSaveError(err.message || 'Failed to delete assignment.');
+        const msg = err.message || 'Failed to delete assignment.';
+        setSaveError(msg);
+        toast.error('Delete Failed', msg);
         setIsSaving(false);
       }
     }

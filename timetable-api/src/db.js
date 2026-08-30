@@ -3,11 +3,15 @@ require('dotenv').config();
 
 const { Pool } = require('pg');
 
+const dbUrl = (process.env.DATABASE_URL || '').trim();
+const isCloudDb = dbUrl && !dbUrl.includes('localhost') && !dbUrl.includes('127.0.0.1');
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: dbUrl,
+  ssl: isCloudDb ? { rejectUnauthorized: false } : false,
   max: 20,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  connectionTimeoutMillis: 5000,
 });
 
 pool.on('error', (err) => {

@@ -13,14 +13,26 @@ import type {
   Assignment,
   ConflictCheckResult,
 } from '@/types/timetable';
+import type { AuthResponse, AuthUser, LoginPayload, SignupPayload } from '@/types/auth';
 
 // ─── Base Client ──────────────────────────────────────────────────────
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
-const apiClient = axios.create({
+export const apiClient = axios.create({
   baseURL: BASE_URL,
   headers: { 'Content-Type': 'application/json' },
-  timeout: 10000,
+  timeout: 15000,
+});
+
+// ─── Request Interceptor: Attach JWT Token ────────────────────────────
+apiClient.interceptors.request.use((config) => {
+  if (typeof window !== 'undefined') {
+    const token = localStorage.getItem('timetable_token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+  }
+  return config;
 });
 
 // ─── Response Interceptor: unwrap or throw ────────────────────────────
@@ -34,13 +46,25 @@ apiClient.interceptors.response.use(
     return response;
   },
   (error) => {
+    const status = error.response?.status;
+    const url = error.config?.url || '';
+
+    // If 401 Unauthorized occurs on protected routes (not login/signup), clear token and notify
+    if (status === 401 && !url.includes('/auth/login') && !url.includes('/auth/signup')) {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('timetable_token');
+        localStorage.removeItem('timetable_user');
+        window.dispatchEvent(new Event('auth:unauthorized'));
+      }
+    }
+
     const message =
       error.response?.data?.error ||
       error.message ||
       'Network error — is the backend running?';
     const err = new Error(message);
     (err as any).details = error.response?.data?.details || [];
-    (err as any).status  = error.response?.status;
+    (err as any).status  = status;
     return Promise.reject(err);
   }
 );
@@ -52,6 +76,13 @@ async function apiFetch<T>(path: string, config?: AxiosRequestConfig): Promise<T
   const res = await apiClient.request<{ success: true; data: T }>({ url: path, ...config });
   return res.data.data;
 }
+
+// ─── Auth API ─────────────────────────────────────────────────────────
+export const authApi = {
+  login:  (data: LoginPayload)  => apiFetch<AuthResponse>('/auth/login', { method: 'POST', data }),
+  signup: (data: SignupPayload) => apiFetch<AuthResponse>('/auth/signup', { method: 'POST', data }),
+  getMe:  ()                    => apiFetch<{ user: AuthUser }>('/auth/me'),
+};
 
 // ─── Classes ──────────────────────────────────────────────────────────
 export const classesApi = {

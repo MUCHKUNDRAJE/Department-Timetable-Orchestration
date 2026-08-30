@@ -44,6 +44,8 @@ export interface TimetableStore {
   subjects:    Subject[];
   assignments: Assignment[];
   isHydrated:  boolean;
+  isFetching:  boolean;
+  activeOperation: string | null;
   apiError:    string | null;
 
   // ─── Active Schedule Selection ──────────────────────────────────────
@@ -64,6 +66,7 @@ export interface TimetableStore {
 
   // ─── Hydration ──────────────────────────────────────────────────────
   hydrateFromApi: () => Promise<void>;
+  setFetching: (isFetching: boolean, operation?: string | null) => void;
 
   // ─── Assignments ────────────────────────────────────────────────────
   addAssignment:            (data: Omit<Assignment, 'id'>) => Promise<string>;
@@ -111,6 +114,8 @@ export const useTimetableStore = create<TimetableStore>((set, get) => ({
   subjects:    [],
   assignments: [],
   isHydrated:  false,
+  isFetching:  false,
+  activeOperation: null,
   apiError:    null,
 
   selectedTargetType: 'class',
@@ -126,8 +131,18 @@ export const useTimetableStore = create<TimetableStore>((set, get) => ({
 
   closeSlotEditor: () => set({ activeSlotEditor: null }),
 
+  setFetching: (isFetching, activeOperation = null) => set({ isFetching, activeOperation }),
+
   // ─── Hydration ───────────────────────────────────────────────────────
   hydrateFromApi: async () => {
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('timetable_token');
+      if (!token) {
+        set({ isHydrated: true, isFetching: false, apiError: null });
+        return;
+      }
+    }
+    set({ isFetching: true, activeOperation: 'Syncing institutional data...' });
     try {
       const [classes, labs, rooms, faculty, subjects, assignments] = await Promise.all([
         classesApi.list(),
@@ -145,13 +160,19 @@ export const useTimetableStore = create<TimetableStore>((set, get) => ({
         subjects,
         assignments,
         isHydrated:         true,
+        isFetching:         false,
+        activeOperation:    null,
         apiError:           null,
         selectedTargetType: 'class',
         selectedTargetId:   classes[0]?.id || '',
       });
     } catch (err: any) {
       console.error('[Store] hydrateFromApi failed:', err.message);
-      set({ isHydrated: true, apiError: err.message });
+      if (!err.message?.toLowerCase().includes('token') && !err.message?.toLowerCase().includes('auth')) {
+        set({ isHydrated: true, isFetching: false, activeOperation: null, apiError: err.message });
+      } else {
+        set({ isHydrated: true, isFetching: false, activeOperation: null, apiError: null });
+      }
     }
   },
 

@@ -25,6 +25,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Drawer } from '@/components/ui/Drawer';
 import { Modal } from '@/components/ui/Modal';
+import { toast } from '@/lib/toast';
 import { calculateFacultyAllocatedHours } from '@/lib/conflict-checker';
 import { cn, getFacultyInitials } from '@/lib/utils';
 
@@ -142,6 +143,7 @@ export function DataManagementStudio() {
     e.preventDefault();
     setIsSaving(true);
     setApiError(null);
+    const itemName = formData.name || formData.code || 'Record';
     try {
       if (editingItem) {
         if (activeTab === 'classes') await updateClass(editingItem.id, formData);
@@ -149,16 +151,20 @@ export function DataManagementStudio() {
         if (activeTab === 'rooms')   await updateRoom(editingItem.id, formData);
         if (activeTab === 'faculty') await updateFaculty(editingItem.id, formData);
         if (activeTab === 'subjects') await updateSubject(editingItem.id, formData);
+        toast.success('Record Updated', `${itemName} has been updated in database.`);
       } else {
         if (activeTab === 'classes') await addClass(formData);
         if (activeTab === 'labs')    await addLab(formData);
         if (activeTab === 'rooms')   await addRoom(formData);
         if (activeTab === 'faculty') await addFaculty(formData);
         if (activeTab === 'subjects') await addSubject(formData);
+        toast.success('Record Created', `${itemName} has been added to database.`);
       }
       setIsDrawerOpen(false);
     } catch (err: any) {
-      setApiError(err.message || 'Failed to save. Is the backend running?');
+      const msg = err.message || 'Failed to save. Is the backend running?';
+      setApiError(msg);
+      toast.error('Save Failed', msg);
     } finally {
       setIsSaving(false);
     }
@@ -166,7 +172,7 @@ export function DataManagementStudio() {
 
   const handleConfirmDelete = async () => {
     if (!deleteCandidate) return;
-    const { id, type } = deleteCandidate;
+    const { id, type, name } = deleteCandidate;
     setIsSaving(true);
     setApiError(null);
     try {
@@ -175,9 +181,12 @@ export function DataManagementStudio() {
       if (type === 'rooms')    await deleteRoom(id);
       if (type === 'faculty')  await deleteFaculty(id);
       if (type === 'subjects') await deleteSubject(id);
+      toast.info('Record Deleted', `${name} was removed from the database.`);
       setDeleteCandidate(null);
     } catch (err: any) {
-      setApiError(err.message || 'Failed to delete. Is the backend running?');
+      const msg = err.message || 'Failed to delete. Is the backend running?';
+      setApiError(msg);
+      toast.error('Delete Failed', msg);
     } finally {
       setIsSaving(false);
     }
@@ -194,8 +203,11 @@ export function DataManagementStudio() {
       a.download = `Timetable_System_Backup_${new Date().toISOString().split('T')[0]}.json`;
       a.click();
       URL.revokeObjectURL(url);
+      toast.success('Backup Exported', 'Full institutional timetable JSON downloaded.');
     } catch (err: any) {
-      setApiError(err.message || 'Export failed. Is the backend running?');
+      const msg = err.message || 'Export failed. Is the backend running?';
+      setApiError(msg);
+      toast.error('Export Failed', msg);
     }
   };
 
@@ -209,12 +221,14 @@ export function DataManagementStudio() {
         const parsed = JSON.parse(event.target?.result as string);
         if (parsed.classes && parsed.faculty && parsed.assignments) {
           await importFullState(parsed);
-          alert('Institutional timetable database imported successfully!');
+          toast.success('Database Imported', 'Successfully imported institutional classes, rooms, faculty, and schedule.');
         } else {
-          alert('Invalid timetable JSON schema.');
+          toast.warning('Invalid Format', 'JSON schema does not match required timetable structure.');
         }
       } catch (err: any) {
-        setApiError(err.message || 'Import failed. Check the file format and backend.');
+        const msg = err.message || 'Import failed. Check the file format and backend.';
+        setApiError(msg);
+        toast.error('Import Failed', msg);
       }
     };
     reader.readAsText(file);

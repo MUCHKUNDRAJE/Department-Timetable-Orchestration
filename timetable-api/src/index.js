@@ -9,6 +9,7 @@ const morgan     = require('morgan');
 const errorHandler = require('./middleware/errorHandler');
 
 // ─── Route modules ────────────────────────────────────────────────────
+const authRouter        = require('./routes/auth');
 const classesRouter     = require('./routes/classes');
 const labsRouter        = require('./routes/labs');
 const roomsRouter       = require('./routes/rooms');
@@ -16,6 +17,7 @@ const subjectsRouter    = require('./routes/subjects');
 const facultyRouter     = require('./routes/faculty');
 const assignmentsRouter = require('./routes/assignments');
 const dataRouter        = require('./routes/data');
+const { requireAuth }   = require('./middleware/auth');
 
 const app  = express();
 const PORT = process.env.PORT || 5000;
@@ -37,15 +39,17 @@ app.get('/health', (req, res) => {
 });
 
 // ─── API Routes ───────────────────────────────────────────────────────
-// NOTE: assignments must be mounted BEFORE generic /:id routes are matched
-// The router internally handles /target/:type/:id before /:id
-app.use('/api/classes',     classesRouter);
-app.use('/api/labs',        labsRouter);
-app.use('/api/rooms',       roomsRouter);
-app.use('/api/subjects',    subjectsRouter);
-app.use('/api/faculty',     facultyRouter);
-app.use('/api/assignments', assignmentsRouter);
-app.use('/api/data',        dataRouter);
+// Public Auth routes
+app.use('/api/auth', authRouter);
+
+// Protected Timetable API Routes
+app.use('/api/classes',     requireAuth, classesRouter);
+app.use('/api/labs',        requireAuth, labsRouter);
+app.use('/api/rooms',       requireAuth, roomsRouter);
+app.use('/api/subjects',    requireAuth, subjectsRouter);
+app.use('/api/faculty',     requireAuth, facultyRouter);
+app.use('/api/assignments', requireAuth, assignmentsRouter);
+app.use('/api/data',        requireAuth, dataRouter);
 
 // ─── 404 Handler ─────────────────────────────────────────────────────
 app.use((req, res) => {
