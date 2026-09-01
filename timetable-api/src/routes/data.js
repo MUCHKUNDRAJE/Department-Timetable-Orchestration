@@ -1,6 +1,7 @@
 'use strict';
 
 const express = require('express');
+const bcrypt = require('bcryptjs');
 const db = require('../db');
 const {
   SEED_CLASSES, SEED_LABS, SEED_ROOMS,
@@ -15,7 +16,7 @@ function toLab(r)        { return { id: r.id, name: r.name, capacity: r.capacity
 function toRoom(r)       { return { id: r.id, name: r.name, capacity: r.capacity, building: r.building, type: r.type }; }
 function toSubject(r)    { return { id: r.id, name: r.name, code: r.code, type: r.type, color: r.color, department: r.department, semester: r.semester }; }
 function toFaculty(r, subjectIds = []) { return { id: r.id, name: r.name, nickname: r.nickname, department: r.department, designation: r.designation, email: r.email, maxWeeklyHours: r.max_weekly_hours, subjectIds }; }
-function toAssignment(r) { return { id: r.id, day: r.day, startSlot: r.start_slot, duration: r.duration, targetType: r.target_type, targetId: r.target_id, classId: r.class_id, facultyId: r.faculty_id, subjectId: r.subject_id, roomId: r.room_id, labId: r.lab_id, labBatches: r.lab_batches || [] }; }
+function toAssignment(r) { return { id: r.id, day: r.day, startSlot: r.start_slot, duration: r.duration, targetType: r.target_type, targetId: r.target_id, classId: r.class_id, facultyId: r.faculty_id || '', subjectId: r.subject_id || '', roomId: r.room_id, labId: r.lab_id, labBatches: r.lab_batches || [], isRecess: Boolean(r.is_recess) }; }
 
 // ─── GET /api/data/export ────────────────────────────────────────────
 router.get('/export', async (req, res, next) => {
@@ -112,13 +113,16 @@ router.post('/import', async (req, res, next) => {
       await client.query(
         `INSERT INTO assignments
            (id, day, start_slot, duration, target_type, target_id, class_id,
-            faculty_id, subject_id, room_id, lab_id, lab_batches)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT (id) DO NOTHING`,
+            faculty_id, subject_id, room_id, lab_id, lab_batches, is_recess)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) ON CONFLICT (id) DO NOTHING`,
         [
           a.id, a.day, a.startSlot, a.duration, a.targetType, a.targetId,
-          a.classId ?? null, a.facultyId, a.subjectId,
+          a.classId ?? null,
+          a.isRecess ? null : (a.facultyId || null),
+          a.isRecess ? null : (a.subjectId || null),
           a.roomId ?? null, a.labId ?? null,
           JSON.stringify(a.labBatches ?? []),
+          Boolean(a.isRecess),
         ]
       );
     }
@@ -142,66 +146,33 @@ router.post('/import', async (req, res, next) => {
 });
 
 // ─── POST /api/data/reset ────────────────────────────────────────────
-// Truncates all tables and re-inserts seed data.
+// Truncates all tables and re-inserts seed data after password authentication.
 router.post('/reset', async (req, res, next) => {
+  const { password } = req.body;
+  if (!password) {
+    return res.status(400).json({ success: false, error: 'User password is required to reset data.' });
+  }
+
+  // Verify password with current logged-in user
+  try {
+    const userRes = await db.query('SELECT password_hash FROM users WHERE id = $1', [req.user.id]);
+    if (userRes.rows.length === 0) {
+      return res.status(401).json({ success: false, error: 'User account not found.' });
+    }
+    const isMatch = await bcrypt.compare(password, userRes.rows[0].password_hash);
+    if (!isMatch) {
+      return res.status(403).json({ success: false, error: 'Incorrect password. Data reset cancelled.' });
+    }
+  } catch (authErr) {
+    return next(authErr);
+  }
+
   const client = await db.getClient();
   try {
     await client.query('BEGIN');
     await client.query('TRUNCATE assignments, faculty_subjects, faculty, subjects, rooms, labs, classes CASCADE');
-
-    for (const c of SEED_CLASSES) {
-      await client.query(
-        `INSERT INTO classes (id, name, department, semester, section, student_count) VALUES ($1,$2,$3,$4,$5,$6)`,
-        [c.id, c.name, c.department, c.semester, c.section, c.studentCount]
-      );
-    }
-    for (const l of SEED_LABS) {
-      await client.query(
-        `INSERT INTO labs (id, name, capacity, department, location) VALUES ($1,$2,$3,$4,$5)`,
-        [l.id, l.name, l.capacity, l.department, l.location ?? null]
-      );
-    }
-    for (const r of SEED_ROOMS) {
-      await client.query(
-        `INSERT INTO rooms (id, name, capacity, building, type) VALUES ($1,$2,$3,$4,$5)`,
-        [r.id, r.name, r.capacity, r.building, r.type]
-      );
-    }
-    for (const s of SEED_SUBJECTS) {
-      await client.query(
-        `INSERT INTO subjects (id, name, code, type, color, department, semester) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-        [s.id, s.name, s.code, s.type, s.color, s.department, s.semester]
-      );
-    }
-    for (const f of SEED_FACULTY) {
-      await client.query(
-        `INSERT INTO faculty (id, name, nickname, department, designation, email, max_weekly_hours) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-        [f.id, f.name, f.nickname ?? null, f.department, f.designation, f.email, f.maxWeeklyHours]
-      );
-      for (const subjId of f.subjectIds) {
-        await client.query(
-          'INSERT INTO faculty_subjects (faculty_id, subject_id) VALUES ($1,$2)',
-          [f.id, subjId]
-        );
-      }
-    }
-    for (const a of SEED_ASSIGNMENTS) {
-      await client.query(
-        `INSERT INTO assignments
-           (id, day, start_slot, duration, target_type, target_id, class_id,
-            faculty_id, subject_id, room_id, lab_id, lab_batches)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-        [
-          a.id, a.day, a.startSlot, a.duration, a.targetType, a.targetId,
-          a.classId ?? null, a.facultyId, a.subjectId,
-          a.roomId ?? null, a.labId ?? null,
-          JSON.stringify(a.labBatches ?? []),
-        ]
-      );
-    }
-
     await client.query('COMMIT');
-    res.json({ success: true, data: { message: 'Database reset to seed data successfully.' } });
+    res.json({ success: true, data: { message: 'All database records cleared completely.' } });
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);

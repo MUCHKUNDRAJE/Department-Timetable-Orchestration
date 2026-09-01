@@ -94,10 +94,22 @@ app.use((req, res) => {
 app.use(errorHandler);
 
 // ─── Start Server ─────────────────────────────────────────────────────
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT, async () => {
   console.log(`\n🚀 Timetable API running at http://localhost:${PORT}`);
   console.log(`   Health: http://localhost:${PORT}/health`);
   console.log(`   Env:    ${process.env.NODE_ENV || 'development'}\n`);
+
+  try {
+    const { query } = require('./db');
+    await query(`
+      ALTER TABLE assignments ADD COLUMN IF NOT EXISTS is_recess BOOLEAN DEFAULT false;
+      ALTER TABLE assignments ALTER COLUMN faculty_id DROP NOT NULL;
+      ALTER TABLE assignments ALTER COLUMN subject_id DROP NOT NULL;
+    `);
+    console.log('[DB] Verified database schema for is_recess and nullable faculty/subject.');
+  } catch (err) {
+    console.warn('[DB] Schema check notice:', err.message);
+  }
 });
 
 // ─── Graceful Shutdown ────────────────────────────────────────────────

@@ -18,11 +18,12 @@ function toAssignment(row) {
     targetType:  row.target_type,
     targetId:    row.target_id,
     classId:     row.class_id,
-    facultyId:   row.faculty_id,
-    subjectId:   row.subject_id,
+    facultyId:   row.faculty_id || '',
+    subjectId:   row.subject_id || '',
     roomId:      row.room_id,
     labId:       row.lab_id,
     labBatches:  row.lab_batches || [],
+    isRecess:    Boolean(row.is_recess),
   };
 }
 
@@ -39,8 +40,9 @@ const assignmentValidators = [
   body('duration').isIn([1, 2]).withMessage('duration must be 1 or 2'),
   body('targetType').isIn(['class','lab','room']).withMessage('targetType must be class|lab|room'),
   body('targetId').trim().notEmpty().withMessage('targetId is required'),
-  body('facultyId').trim().notEmpty().withMessage('facultyId is required'),
-  body('subjectId').trim().notEmpty().withMessage('subjectId is required'),
+  body('facultyId').optional({ nullable: true }).trim(),
+  body('subjectId').optional({ nullable: true }).trim(),
+  body('isRecess').optional().isBoolean(),
   body('roomId').optional({ nullable: true }).trim(),
   body('labId').optional({ nullable: true }).trim(),
   body('classId').optional({ nullable: true }).trim(),
@@ -62,19 +64,23 @@ router.post('/', assignmentValidators, validate, async (req, res, next) => {
   try {
     const {
       day, startSlot, duration, targetType, targetId,
-      classId, facultyId, subjectId, roomId, labId, labBatches = [],
+      classId, facultyId, subjectId, roomId, labId, labBatches = [], isRecess = false,
     } = req.body;
     const id = req.body.id || `asg_${uuidv4().replace(/-/g, '').slice(0, 12)}`;
     const result = await db.query(
       `INSERT INTO assignments
          (id, day, start_slot, duration, target_type, target_id, class_id,
-          faculty_id, subject_id, room_id, lab_id, lab_batches)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+          faculty_id, subject_id, room_id, lab_id, lab_batches, is_recess)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
       [
         id, day, startSlot, duration, targetType, targetId,
-        classId || null, facultyId, subjectId,
-        roomId || null, labId || null,
+        classId || null,
+        isRecess ? null : (facultyId || null),
+        isRecess ? null : (subjectId || null),
+        isRecess ? null : (roomId || null),
+        isRecess ? null : (labId || null),
         JSON.stringify(labBatches),
+        Boolean(isRecess),
       ]
     );
     res.status(201).json({ success: true, data: toAssignment(result.rows[0]) });
@@ -86,19 +92,23 @@ router.put('/:id', assignmentValidators, validate, async (req, res, next) => {
   try {
     const {
       day, startSlot, duration, targetType, targetId,
-      classId, facultyId, subjectId, roomId, labId, labBatches = [],
+      classId, facultyId, subjectId, roomId, labId, labBatches = [], isRecess = false,
     } = req.body;
     const result = await db.query(
       `UPDATE assignments
        SET day=$2, start_slot=$3, duration=$4, target_type=$5, target_id=$6,
            class_id=$7, faculty_id=$8, subject_id=$9, room_id=$10, lab_id=$11,
-           lab_batches=$12, updated_at=NOW()
+           lab_batches=$12, is_recess=$13, updated_at=NOW()
        WHERE id=$1 RETURNING *`,
       [
         req.params.id, day, startSlot, duration, targetType, targetId,
-        classId || null, facultyId, subjectId,
-        roomId || null, labId || null,
+        classId || null,
+        isRecess ? null : (facultyId || null),
+        isRecess ? null : (subjectId || null),
+        isRecess ? null : (roomId || null),
+        isRecess ? null : (labId || null),
         JSON.stringify(labBatches),
+        Boolean(isRecess),
       ]
     );
     if (result.rowCount === 0) return res.status(404).json({ success: false, error: 'Assignment not found.' });
