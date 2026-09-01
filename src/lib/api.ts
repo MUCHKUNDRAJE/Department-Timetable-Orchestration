@@ -162,5 +162,5 @@ export interface FullState {
 export const dataApi = {
   export: ()                      => apiFetch<FullState>('/data/export'),
   import: (state: FullState)      => apiFetch<{ imported: Record<string, number> }>('/data/import', { method: 'POST', data: state }),
-  reset:  ()                      => apiFetch<{ message: string }>('/data/reset', { method: 'POST' }),
+  reset:  (password: string)      => apiFetch<{ message: string }>('/data/reset', { method: 'POST', data: { password } }),
 };

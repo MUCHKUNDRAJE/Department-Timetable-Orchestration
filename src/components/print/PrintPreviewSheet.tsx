@@ -6,6 +6,7 @@ import { INSTITUTION_INFO, DAYS, TIME_SLOTS } from '@/lib/constants';
 import { CollegeClass, Lab, Room, Faculty, Subject, Assignment, PrintMode, Day } from '@/types/timetable';
 import { Building2, UserCheck, BookOpen, Clock, CalendarDays } from 'lucide-react';
 import { cn, getSubjectInitials, getFacultyInitials, getVenueDisplay } from '@/lib/utils';
+import { useTimetableStore } from '@/lib/store';
 
 interface PrintPreviewSheetProps {
   mode: PrintMode;
@@ -20,6 +21,9 @@ interface PrintPreviewSheetProps {
 
 export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetProps>(
   ({ mode, targetId, classes, labs, rooms, facultyList, subjects, assignments }, ref) => {
+    const storeAcademicSession = useTimetableStore((s) => s.academicSession);
+    const activeSession = storeAcademicSession || INSTITUTION_INFO.academicYear;
+
     // Determine Target Title, Subtitle and Type
     let title = '';
     let subtitle = '';
@@ -29,7 +33,7 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
       const cls = classes.find((c) => c.id === targetId) || classes[0];
       entityType = 'UNDERGRADUATE CLASS TIMETABLE';
       title = cls ? `${cls.name} (Semester ${cls.semester} - Section ${cls.section})` : 'Class Timetable';
-      subtitle = `Strength: ${cls?.studentCount || 60} Students | Academic Year: ${INSTITUTION_INFO.academicYear}`;
+      subtitle = `Strength: ${cls?.studentCount || 60} Students | Academic Session: ${activeSession}`;
     } else if (mode === 'lab') {
       const lab = labs.find((l) => l.id === targetId) || labs[0];
       entityType = 'LABORATORY UTILIZATION SCHEDULE';
@@ -75,22 +79,28 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
     };
 
     // Extract subjects and faculty involved in this schedule
-    const usedSubjectIds = Array.from(new Set(currentAssignments.map((a) => a.subjectId)));
+    const usedSubjectIds = Array.from(
+      new Set(currentAssignments.map((a) => a.subjectId).filter((id): id is string => Boolean(id)))
+    );
     const activeSubjects = subjects.filter((s) => usedSubjectIds.includes(s.id));
     // If no assignments yet, show department subjects
     const displaySubjects = activeSubjects.length > 0 ? activeSubjects : subjects.slice(0, 8);
 
-    const usedFacultyIds = Array.from(new Set(currentAssignments.map((a) => a.facultyId)));
+    const usedFacultyIds = Array.from(
+      new Set(currentAssignments.map((a) => a.facultyId).filter((id): id is string => Boolean(id)))
+    );
     const activeFaculty = facultyList.filter((f) => usedFacultyIds.includes(f.id));
     const displayFaculty = activeFaculty.length > 0 ? activeFaculty : facultyList.slice(0, 8);
 
     // Faculty hours map for the current schedule
     const facultyScheduleHours = new Map<string, number>();
     currentAssignments.forEach((a) => {
-      facultyScheduleHours.set(
-        a.facultyId,
-        (facultyScheduleHours.get(a.facultyId) || 0) + (a.duration || 1)
-      );
+      if (a.facultyId && !a.isRecess) {
+        facultyScheduleHours.set(
+          a.facultyId,
+          (facultyScheduleHours.get(a.facultyId) || 0) + (a.duration || 1)
+        );
+      }
     });
 
     // Find assigned faculty for a subject
@@ -118,7 +128,7 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
         <div className="border-b-2 border-slate-900 pb-3 mb-3.5 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3.5 min-w-0">
             <div className="w-12 h-12 rounded-xl flex items-center justify-center font-bold shrink-0">
-               <Image src="/image.png" alt="Logo" width={48} height={48} />
+              <Image src="/image.png" alt="Logo" width={48} height={48} />
             </div>
             <div className="min-w-0">
               <h1 className="text-sm sm:text-base font-extrabold tracking-wider uppercase text-slate-900 leading-tight truncate">
@@ -126,9 +136,7 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
               </h1>
               <p className="text-xs font-semibold text-slate-700 truncate">{INSTITUTION_INFO.department}</p>
               <div className="flex items-center gap-2.5 text-[10px] text-slate-500 font-mono mt-0.5">
-                <span>ACADEMIC YEAR: {INSTITUTION_INFO.academicYear}</span>
-                <span>•</span>
-                <span>EFFECTIVE: {INSTITUTION_INFO.effectiveDate}</span>
+                <span>ACADEMIC SESSION: {activeSession}</span>
               </div>
             </div>
           </div>
@@ -185,15 +193,37 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
                   {TIME_SLOTS.map((slot) => {
                     const assignment = getAssignmentAt(day, slot.id);
                     const isCovered = isSlotCoveredByPreviousLab(day, slot.id);
-                    console.log(
-                    TIME_SLOTS
-                    )
 
                     if (isCovered) return null;
 
                     if (assignment) {
+                      // Recess Slot in Lightgreen background with Black text
+                      if (assignment.isRecess) {
+                        return (
+                          <td
+                            key={`${day}-${slot.id}`}
+                            colSpan={1}
+                            title={`Institutional Recess (${TIME_SLOTS[slot.id]?.start} - ${TIME_SLOTS[slot.id]?.end})`}
+                            className="p-1 border-r border-slate-300 last:border-r-0 align-middle text-black"
+                            style={{ backgroundColor: '#dcfce7', color: '#000000' }}
+                          >
+                            <div className="flex flex-col items-center justify-center gap-0.5 font-mono py-1 text-center">
+                              <span className="text-[11px] font-black text-black tracking-wider uppercase leading-none">
+                                RECESS
+                              </span>
+                              <span className="text-[8px] font-bold text-black uppercase tracking-tight px-1 py-0.2 rounded bg-green-200/90 border border-green-400 leading-none">
+                                Break
+                              </span>
+                            </div>
+                          </td>
+                        );
+                      }
+
                       const isLab = assignment.duration === 2;
                       const isBatchLab = isLab && assignment.labBatches && assignment.labBatches.length > 0;
+                      const attendingClass = classes.find(
+                        (c) => c.id === (assignment.targetType === 'class' ? assignment.targetId : assignment.classId)
+                      );
 
                       if (isBatchLab && assignment.labBatches) {
                         const bA1 = assignment.labBatches.find((b) => b.id === 'A1');
@@ -237,7 +267,7 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
                           <td
                             key={`${day}-${slot.id}`}
                             colSpan={2}
-                            title={`4-Batch Practical: A1[${facA1}], A2[${facA2}], A3[${facA3}], A4[${facA4}] | Labs: ${labA1}, ${labA2}, ${labA3}, ${labA4}`}
+                            title={`4-Batch Practical: A1[${facA1}], A2[${facA2}], A3[${facA3}], A4[${facA4}] | Labs: ${labA1}, ${labA2}, ${labA3}, ${labA4}${attendingClass ? ` | Class: ${attendingClass.name}` : ''}`}
                             className="p-1 border-r border-slate-300 last:border-r-0 align-middle bg-rose-50/85 border-rose-200 text-slate-900"
                           >
                             <div className="flex flex-col items-center justify-center gap-0.5 font-mono py-0.5 text-center">
@@ -258,6 +288,13 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
                               <div className="text-[8px] text-slate-700 font-semibold leading-tight px-1">
                                 {labA1}, {labA2} <span className="text-slate-400 font-normal">/</span> {labA3}, {labA4}
                               </div>
+
+                              {/* Attending class if not UG mode */}
+                              {mode !== 'ug' && attendingClass?.name && (
+                                <div className="text-[8.5px] text-slate-900 font-bold bg-amber-100 px-1 py-0.2 rounded border border-amber-300 leading-none mt-0.5">
+                                  {attendingClass.name}
+                                </div>
+                              )}
                             </div>
                           </td>
                         );
@@ -267,8 +304,6 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
                       const subj = subjects.find((s) => s.id === assignment.subjectId);
                       const room = rooms.find((r) => r.id === assignment.roomId);
                       const lab = labs.find((l) => l.id === assignment.labId);
-                      const cls = classes.find((c) => c.id === assignment.classId);
-                      
 
                       const subjectInitials = getSubjectInitials(subj);
                       const facultyInitials = getFacultyInitials(fac);
@@ -280,7 +315,7 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
                         <td
                           key={`${day}-${slot.id}`}
                           colSpan={isLab ? 2 : 1}
-                          title={`${subj?.name} (${subj?.code}) | Faculty: ${fac?.name || 'Faculty'} | Venue: ${venueDisplay}`}
+                          title={`${subj?.name} (${subj?.code}) | Faculty: ${fac?.name || 'Faculty'} | Venue: ${venueDisplay}${attendingClass ? ` | Class: ${attendingClass.name}` : ''}`}
                           className={cn(
                             'p-1 border-r border-slate-300 last:border-r-0 align-middle',
                             isLab
@@ -309,9 +344,9 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
                             </div>
 
                             {/* Attending class if not UG mode */}
-                            {mode !== 'ug' && cls?.name && (
-                              <div className="text-[8.5px] text-slate-600 font-medium leading-none">
-                                {cls.name}
+                            {mode !== 'ug' && attendingClass?.name && (
+                              <div className="text-[8.5px] text-slate-900 font-bold bg-amber-100 px-1 py-0.5 rounded border border-amber-300 leading-none shadow-2xs">
+                                {attendingClass.name}
                               </div>
                             )}
 
@@ -319,11 +354,6 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
                             {mode === 'ug' && subj?.code && (
                               <div className="text-[8px] text-slate-500 font-medium leading-none">
                                 {subj.code}
-                              </div>
-                            )}
-                             {mode !== 'ug' && cls?.name && (
-                              <div className="text-[8px] text-slate-500 font-medium leading-none">
-                                {cls.name}
                               </div>
                             )}
                           </div>
@@ -499,7 +529,7 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
         </div>
 
         {/* Watermark Footer */}
-       {/*} <div className="pt-3 text-center text-[8.5px] text-slate-400 font-mono select-none border-t border-slate-200 mt-2">
+        {/*} <div className="pt-3 text-center text-[8.5px] text-slate-400 font-mono select-none border-t border-slate-200 mt-2">
           Timetable Allocator • Created by Muchkundraje Thote
         </div>*/}
       </div>

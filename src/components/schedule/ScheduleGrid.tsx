@@ -1,8 +1,9 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Plus, User, MapPin, FlaskConical, Clock } from 'lucide-react';
+import { Plus, User, MapPin, FlaskConical, Clock, Coffee, Calendar } from 'lucide-react';
 import { useTimetableStore } from '@/lib/store';
 import { DAYS, TIME_SLOTS } from '@/lib/constants';
 import { Day, Assignment } from '@/types/timetable';
@@ -18,6 +19,13 @@ export function ScheduleGrid() {
   const labs = useTimetableStore((s) => s.labs);
   const classes = useTimetableStore((s) => s.classes);
   const openSlotEditor = useTimetableStore((s) => s.openSlotEditor);
+
+  const currentTargets =
+    selectedTargetType === 'class'
+      ? classes
+      : selectedTargetType === 'lab'
+      ? labs
+      : rooms;
 
   // Filter assignments relevant to this selected target
   const relevantAssignments = assignments.filter((a) => {
@@ -43,6 +51,31 @@ export function ScheduleGrid() {
     );
     return !!prevAssignment;
   };
+
+  if (currentTargets.length === 0) {
+    return (
+      <div className="bg-surface border border-border rounded-2xl p-12 text-center shadow-subtle space-y-3">
+        <div className="w-12 h-12 rounded-2xl bg-primary-light text-primary mx-auto flex items-center justify-center">
+          <Calendar className="w-6 h-6" />
+        </div>
+        <h3 className="text-base font-bold text-foreground">
+          No {selectedTargetType === 'class' ? 'Classes' : selectedTargetType === 'lab' ? 'Labs' : 'Rooms'} Created Yet
+        </h3>
+        <p className="text-xs text-muted-foreground max-w-md mx-auto">
+          The database is currently empty. Visit the Manage Data studio to add your institution&apos;s classes, laboratories, classrooms, and faculty to begin scheduling.
+        </p>
+        <div className="pt-2">
+          <Link
+            href="/data"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-white text-xs font-bold shadow-xs hover:bg-primary-hover transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Add Master Data in Manage Data Studio
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-surface border border-border rounded-2xl shadow-subtle overflow-hidden">
@@ -100,6 +133,52 @@ export function ScheduleGrid() {
                   const attendingClass = classes.find((c) => c.id === assignment?.classId);
 
                   if (assignment) {
+                    if (assignment.isRecess) {
+                      return (
+                        <div
+                          key={`${day}-${slot.id}`}
+                          className="p-1.5 border-r border-border last:border-r-0 relative flex flex-col min-w-0 overflow-hidden col-span-1 bg-surface"
+                        >
+                          <motion.div
+                            whileHover={{ scale: 1.02, y: -1 }}
+                            transition={{ duration: 0.15 }}
+                            onClick={() => openSlotEditor(day, slot.id, assignment.duration, assignment.id)}
+                            title={`Recess / Break Session (${TIME_SLOTS[slot.id]?.start} - ${TIME_SLOTS[slot.id]?.end})`}
+                            className="w-full h-[84px] min-h-[84px] max-h-[84px] rounded-xl p-2 flex flex-col justify-between cursor-pointer border transition-all duration-150 relative group min-w-0 overflow-hidden select-none bg-emerald-100/90 border-emerald-400 hover:border-emerald-500 hover:shadow-card text-black"
+                          >
+                            {/* Top Row: RECESS Badge + Time */}
+                            <div className="flex items-center justify-between gap-1 min-w-0">
+                              <span className="font-mono text-[11px] font-black px-1.5 py-0.5 rounded tracking-wider shadow-xs shrink-0 bg-emerald-700 text-white uppercase">
+                                RECESS
+                              </span>
+                              <span className="text-[10px] font-mono text-emerald-900 flex items-center gap-0.5 opacity-80 group-hover:opacity-100 shrink-0 font-bold">
+                                <Clock className="w-2.5 h-2.5" />
+                                {TIME_SLOTS[slot.id]?.shortLabel}
+                              </span>
+                            </div>
+
+                            {/* Middle Row: Coffee / Break indicator + bold black text */}
+                            <div className="my-auto flex items-center justify-between gap-1 font-mono text-[11px] font-bold text-black min-w-0">
+                              <div className="flex items-center gap-1.5 text-emerald-950 truncate">
+                                <Coffee className="w-3.5 h-3.5 shrink-0 text-emerald-800" />
+                                <span className="truncate font-black text-black text-[11px]">Recess / Lunch</span>
+                              </div>
+                            </div>
+
+                            {/* Bottom Row: Status note */}
+                            <div className="flex items-center justify-between text-[9px] text-emerald-900 font-mono border-t border-emerald-300 pt-0.5 min-w-0 font-semibold">
+                              <span className="truncate">Institutional Break</span>
+                              {selectedTargetType !== 'class' && attendingClass && (
+                                <span className="text-emerald-950 font-bold truncate max-w-[65px]">
+                                  {attendingClass.name.split(' ')[0]}
+                                </span>
+                              )}
+                            </div>
+                          </motion.div>
+                        </div>
+                      );
+                    }
+
                     const isBatchLab = isLab && assignment.labBatches && assignment.labBatches.length > 0;
 
                     if (isBatchLab && assignment.labBatches) {

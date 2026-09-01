@@ -28,6 +28,7 @@ export default function HubPage() {
   const rooms = useTimetableStore((s) => s.rooms);
   const faculty = useTimetableStore((s) => s.faculty);
   const assignments = useTimetableStore((s) => s.assignments);
+  const academicSession = useTimetableStore((s) => s.academicSession);
 
   const totalSlotsWeek = 48;
   const totalAllocatedHours = assignments.reduce((acc, curr) => acc + curr.duration, 0);
@@ -58,22 +59,22 @@ export default function HubPage() {
         'Generate official institution-grade timetables with HOD signature blocks, subject code legends, and one-click multi-page bulk PDF export.',
       href: '/print',
       icon: Printer,
-      theme: 'from-accent to-primary',
+      theme: 'from-accent to-highlight',
       accentColor: 'text-accent',
-      badge: 'Pixel-Accurate PDF',
-      badgeBg: 'bg-accent-light text-primary border-accent/30',
+      badge: 'Official Formats',
+      badgeBg: 'bg-accent-light text-accent border-accent/30',
       highlights: [
         'UG Class, Lab, Room & Faculty modes',
-        'Single and multi-page bulk PDF export',
-        'Official institutional signature layouts',
+        'Direct browser & PDF vector download',
+        'Integrated Faculty Reference matrix',
       ],
-      ctaText: 'Launch Export Studio',
+      ctaText: 'Enter Publishing Studio',
     },
     {
-      title: 'Insert & Manage Data',
-      subtitle: 'Entity Management Center',
+      title: 'Manage Institutional Data',
+      subtitle: 'Master Data & System Config',
       description:
-        'Configure Classes, Laboratories, Smart Lecture Rooms, Faculty profiles, and Subject mappings with instant JSON database backup and restore.',
+        'Add, edit, and organize classes, laboratories, classrooms, faculty workload quotas, and subject-to-faculty teaching matrices.',
       href: '/data',
       icon: Database,
       theme: 'from-highlight to-primary',
@@ -99,7 +100,7 @@ export default function HubPage() {
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-surface-subtle border border-border text-xs font-semibold text-muted-foreground mb-3">
               <ShieldCheck className="w-3.5 h-3.5 text-primary" />
-              <span>{INSTITUTION_INFO.academicYear} Timetable Engine</span>
+              <span>{academicSession || INSTITUTION_INFO.academicYear} Timetable Engine</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-foreground tracking-tight">
               Department Timetable Orchestration

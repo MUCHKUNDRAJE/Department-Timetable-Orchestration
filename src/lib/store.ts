@@ -37,31 +37,33 @@ import { ConflictCheckResult } from '@/types/timetable';
 
 export interface TimetableStore {
   // ─── State ─────────────────────────────────────────────────────────
-  classes:     CollegeClass[];
-  labs:        Lab[];
-  rooms:       Room[];
-  faculty:     Faculty[];
-  subjects:    Subject[];
+  classes: CollegeClass[];
+  labs: Lab[];
+  rooms: Room[];
+  faculty: Faculty[];
+  subjects: Subject[];
   assignments: Assignment[];
-  isHydrated:  boolean;
-  isFetching:  boolean;
+  academicSession: string;
+  setAcademicSession: (session: string) => void;
+  isHydrated: boolean;
+  isFetching: boolean;
   activeOperation: string | null;
-  apiError:    string | null;
+  apiError: string | null;
 
   // ─── Active Schedule Selection ──────────────────────────────────────
   selectedTargetType: TargetType;
-  selectedTargetId:   string;
+  selectedTargetId: string;
   setSelectedTarget: (type: TargetType, id: string) => void;
 
   // ─── Active Slot Editor UI State ────────────────────────────────────
   activeSlotEditor: {
-    isOpen:       boolean;
-    day:          Day;
-    startSlot:    number;
-    duration:     1 | 2;
+    isOpen: boolean;
+    day: Day;
+    startSlot: number;
+    duration: 1 | 2;
     assignmentId?: string;
   } | null;
-  openSlotEditor:  (day: Day, startSlot: number, duration?: 1 | 2, assignmentId?: string) => void;
+  openSlotEditor: (day: Day, startSlot: number, duration?: 1 | 2, assignmentId?: string) => void;
   closeSlotEditor: () => void;
 
   // ─── Hydration ──────────────────────────────────────────────────────
@@ -69,57 +71,67 @@ export interface TimetableStore {
   setFetching: (isFetching: boolean, operation?: string | null) => void;
 
   // ─── Assignments ────────────────────────────────────────────────────
-  addAssignment:            (data: Omit<Assignment, 'id'>) => Promise<string>;
-  updateAssignment:         (id: string, updates: Partial<Assignment>) => Promise<void>;
-  deleteAssignment:         (id: string) => Promise<void>;
-  clearAssignmentsForTarget:(targetType: TargetType, targetId: string) => Promise<void>;
-  checkAssignmentConflict:  (params: ConflictCheckParams) => Promise<ConflictCheckResult>;
+  addAssignment: (data: Omit<Assignment, 'id'>) => Promise<string>;
+  updateAssignment: (id: string, updates: Partial<Assignment>) => Promise<void>;
+  deleteAssignment: (id: string) => Promise<void>;
+  clearAssignmentsForTarget: (targetType: TargetType, targetId: string) => Promise<void>;
+  checkAssignmentConflict: (params: ConflictCheckParams) => Promise<ConflictCheckResult>;
 
   // ─── Classes ────────────────────────────────────────────────────────
-  addClass:    (item: Omit<CollegeClass, 'id'>) => Promise<string>;
+  addClass: (item: Omit<CollegeClass, 'id'>) => Promise<string>;
   updateClass: (id: string, updates: Partial<CollegeClass>) => Promise<void>;
   deleteClass: (id: string) => Promise<void>;
 
   // ─── Labs ───────────────────────────────────────────────────────────
-  addLab:    (item: Omit<Lab, 'id'>) => Promise<string>;
+  addLab: (item: Omit<Lab, 'id'>) => Promise<string>;
   updateLab: (id: string, updates: Partial<Lab>) => Promise<void>;
   deleteLab: (id: string) => Promise<void>;
 
   // ─── Rooms ──────────────────────────────────────────────────────────
-  addRoom:    (item: Omit<Room, 'id'>) => Promise<string>;
+  addRoom: (item: Omit<Room, 'id'>) => Promise<string>;
   updateRoom: (id: string, updates: Partial<Room>) => Promise<void>;
   deleteRoom: (id: string) => Promise<void>;
 
   // ─── Faculty ────────────────────────────────────────────────────────
-  addFaculty:    (item: Omit<Faculty, 'id'>) => Promise<string>;
+  addFaculty: (item: Omit<Faculty, 'id'>) => Promise<string>;
   updateFaculty: (id: string, updates: Partial<Faculty>) => Promise<void>;
   deleteFaculty: (id: string) => Promise<void>;
 
   // ─── Subjects ───────────────────────────────────────────────────────
-  addSubject:    (item: Omit<Subject, 'id'>) => Promise<string>;
+  addSubject: (item: Omit<Subject, 'id'>) => Promise<string>;
   updateSubject: (id: string, updates: Partial<Subject>) => Promise<void>;
   deleteSubject: (id: string) => Promise<void>;
 
   // ─── Backup / Import / Reset ────────────────────────────────────────
-  resetToSeedData:  () => Promise<void>;
-  importFullState:  (state: FullState) => Promise<void>;
-  exportFullState:  () => Promise<FullState>;
+  resetToSeedData: (password: string) => Promise<void>;
+  importFullState: (state: FullState) => Promise<void>;
+  exportFullState: () => Promise<FullState>;
 }
 
 export const useTimetableStore = create<TimetableStore>((set, get) => ({
-  classes:     [],
-  labs:        [],
-  rooms:       [],
-  faculty:     [],
-  subjects:    [],
+  classes: [],
+  labs: [],
+  rooms: [],
+  faculty: [],
+  subjects: [],
   assignments: [],
-  isHydrated:  false,
-  isFetching:  false,
+  academicSession:
+    typeof window !== 'undefined'
+      ? localStorage.getItem('timetable_academic_session') || '2026 - 2027 (Even Semester)'
+      : '2026 - 2027 (Even Semester)',
+  setAcademicSession: (session: string) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('timetable_academic_session', session);
+    }
+    set({ academicSession: session });
+  },
+  isHydrated: false,
+  isFetching: false,
   activeOperation: null,
-  apiError:    null,
+  apiError: null,
 
   selectedTargetType: 'class',
-  selectedTargetId:   '',
+  selectedTargetId: '',
 
   setSelectedTarget: (type, id) => set({ selectedTargetType: type, selectedTargetId: id }),
 
@@ -159,12 +171,12 @@ export const useTimetableStore = create<TimetableStore>((set, get) => ({
         faculty,
         subjects,
         assignments,
-        isHydrated:         true,
-        isFetching:         false,
-        activeOperation:    null,
-        apiError:           null,
+        isHydrated: true,
+        isFetching: false,
+        activeOperation: null,
+        apiError: null,
         selectedTargetType: 'class',
-        selectedTargetId:   classes[0]?.id || '',
+        selectedTargetId: classes[0]?.id || '',
       });
     } catch (err: any) {
       console.error('[Store] hydrateFromApi failed:', err.message);
@@ -302,7 +314,7 @@ export const useTimetableStore = create<TimetableStore>((set, get) => ({
   deleteFaculty: async (id) => {
     await facultyApi.delete(id);
     set((s) => ({
-      faculty:     s.faculty.filter((f) => f.id !== id),
+      faculty: s.faculty.filter((f) => f.id !== id),
       assignments: s.assignments.filter((a) => a.facultyId !== id),
     }));
   },
@@ -324,9 +336,9 @@ export const useTimetableStore = create<TimetableStore>((set, get) => ({
   deleteSubject: async (id) => {
     await subjectsApi.delete(id);
     set((s) => ({
-      subjects:    s.subjects.filter((sub) => sub.id !== id),
+      subjects: s.subjects.filter((sub) => sub.id !== id),
       assignments: s.assignments.filter((a) => a.subjectId !== id),
-      faculty:     s.faculty.map((f) => ({
+      faculty: s.faculty.map((f) => ({
         ...f,
         subjectIds: f.subjectIds.filter((sid) => sid !== id),
       })),
@@ -334,8 +346,8 @@ export const useTimetableStore = create<TimetableStore>((set, get) => ({
   },
 
   // ─── Reset / Import / Export ─────────────────────────────────────────
-  resetToSeedData: async () => {
-    await dataApi.reset();
+  resetToSeedData: async (password: string) => {
+    await dataApi.reset(password);
     await get().hydrateFromApi();
   },
 
@@ -344,7 +356,7 @@ export const useTimetableStore = create<TimetableStore>((set, get) => ({
     set({
       ...state,
       selectedTargetType: 'class',
-      selectedTargetId:   state.classes[0]?.id || '',
+      selectedTargetId: state.classes[0]?.id || '',
     });
   },
 

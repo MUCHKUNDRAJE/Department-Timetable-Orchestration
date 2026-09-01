@@ -1,0 +1,11 @@
+The App is good there are Several issues and the Bugs in the App , so i want to fix and create tag
+so...
+
+- 1st in the  in the Secudle tab  Add the Recuss Option Session Duration & Type and i want 1 Hour (Lecture)
+2 Hours (4-Batch Lab) Recusss in the single line nav and orther mode called reccess after selecting that the slider  have the option to confrom Assignment the i t said reccess
+- the  Recuss Option  visulize in the Visual Timetable Scheduler should be in Green and in the timetable erport aslo  lightgreen in the Color 
+ and black in text 
+- there is the Bug whjen i remove the slot , then after reschedule i get the saving option instead of confrom Assignment 
+- and in the Manage data add the Session which is use to Assgin the Session means , if here i do 2026-2027 even , and in all the time table the Session will get change or if do changes it will again it change 
+- in the Publish and export Studio -- in the Lab , Room  , faculty ---with  subject intials ,faculty intials and room add the class i mean in which class that lecture is going to happen 
+-and  while reseting the data i want whole data get delete but before that it should ask password of the users after that it will get delete 

@@ -67,15 +67,16 @@ export interface Assignment {
   id: string;
   day: Day;
   startSlot: number; // 0 to 7 (e.g. 0 = 9-10)
-  duration: 1 | 2; // 1 for regular lecture, 2 for lab
+  duration: 1 | 2; // 1 for regular lecture or recess, 2 for lab
   targetType: TargetType;
   targetId: string; // ID of Class, Lab, or Room being scheduled
   classId?: string; // If targetType is Lab/Room, which Class is attending
-  facultyId: string;
-  subjectId: string;
+  facultyId?: string;
+  subjectId?: string;
   roomId?: string; // Assigned physical room (if target is Class)
   labId?: string; // Assigned lab (if subject is Lab and target is Class)
   labBatches?: LabBatch[]; // 4-batch division (A1, A2, A3, A4) for 2hr lab sessions
+  isRecess?: boolean; // True if this slot is a Recess / Break
 }
 
 export interface ConflictCheckResult {

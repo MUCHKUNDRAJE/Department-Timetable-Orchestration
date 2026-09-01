@@ -9,6 +9,7 @@ import {
   FlaskConical,
   Sparkles,
   Layers,
+  Coffee,
 } from 'lucide-react';
 import { useTimetableStore } from '@/lib/store';
 import { TIME_SLOTS } from '@/lib/constants';
@@ -85,7 +86,8 @@ export function SlotDrawer() {
   const updateAssignment = useTimetableStore((s) => s.updateAssignment);
   const deleteAssignment = useTimetableStore((s) => s.deleteAssignment);
 
-  // Form local state for 1-hour lecture
+  // Form local state
+  const [sessionType, setSessionType] = useState<'lecture' | 'lab' | 'recess'>('lecture');
   const [facultyId, setFacultyId] = useState('');
   const [subjectId, setSubjectId] = useState('');
   const [duration, setDuration] = useState<1 | 2>(1);
@@ -112,9 +114,23 @@ export function SlotDrawer() {
   useEffect(() => {
     if (!isOpen) return;
 
+    setIsSaving(false);
+    setSaveError(null);
+
     if (assignmentId) {
       const existing = assignments.find((a) => a.id === assignmentId);
       if (existing) {
+        if (existing.isRecess) {
+          setSessionType('recess');
+          setDuration(1);
+          return;
+        }
+
+        if (existing.duration === 2) {
+          setSessionType('lab');
+        } else {
+          setSessionType('lecture');
+        }
         const targetClass = selectedTargetType === 'class' ? classes.find((c) => c.id === selectedTargetId) : undefined;
         const targetSemester = targetClass?.semester;
 
@@ -557,6 +573,36 @@ export function SlotDrawer() {
     setIsSaving(true);
 
     try {
+      if (sessionType === 'recess') {
+        const payload = {
+          day,
+          startSlot,
+          duration: 1 as const,
+          targetType: selectedTargetType,
+          targetId: selectedTargetId,
+          facultyId: '',
+          subjectId: '',
+          roomId: undefined,
+          classId: undefined,
+          labBatches: undefined,
+          isRecess: true,
+        };
+
+        if (assignmentId) {
+          await updateAssignment(assignmentId, payload);
+        } else {
+          await addAssignment(payload);
+        }
+
+        toast.success(
+          assignmentId ? 'Recess Updated' : 'Recess Scheduled',
+          `${day} • Slot ${startSlot + 1} marked as Recess.`
+        );
+        setIsSaving(false);
+        closeSlotEditor();
+        return;
+      }
+
       if (duration === 1) {
         if (!conflictResult.canBook) return;
 
@@ -571,6 +617,7 @@ export function SlotDrawer() {
           roomId: selectedTargetType === 'class' ? roomId : undefined,
           classId: selectedTargetType !== 'class' ? classId : undefined,
           labBatches: undefined,
+          isRecess: false,
         };
 
         if (assignmentId) {
@@ -605,6 +652,7 @@ export function SlotDrawer() {
           labId: selectedTargetType === 'class' ? primaryLabId : undefined,
           classId: selectedTargetType !== 'class' ? classId : undefined,
           labBatches,
+          isRecess: false,
         };
 
         if (assignmentId) {
@@ -618,6 +666,7 @@ export function SlotDrawer() {
         assignmentId ? 'Session Updated' : 'Session Scheduled',
         `${day} • Slot ${startSlot + 1} (${duration === 2 ? '2-Hour Lab' : 'Lecture'}) assigned successfully.`
       );
+      setIsSaving(false);
       closeSlotEditor();
     } catch (err: any) {
       const msg = err.message || 'Failed to save assignment. Is the backend running?';
@@ -634,6 +683,7 @@ export function SlotDrawer() {
       try {
         await deleteAssignment(assignmentId);
         toast.info('Session Removed', `${day} • Slot ${startSlot + 1} cleared from timetable.`);
+        setIsSaving(false);
         closeSlotEditor();
       } catch (err: any) {
         const msg = err.message || 'Failed to delete assignment.';
@@ -647,7 +697,13 @@ export function SlotDrawer() {
   const currentSlotObj = TIME_SLOTS[startSlot];
   const endSlotTime = duration === 2 ? TIME_SLOTS[startSlot + 1]?.end || '06:00' : currentSlotObj?.end;
 
-  const isFormValid = !isSaving && (duration === 1 ? (!!facultyId && !!subjectId && conflictResult.canBook) : batchValidation.isValid);
+  const isFormValid =
+    !isSaving &&
+    (sessionType === 'recess'
+      ? true
+      : duration === 1
+      ? !!facultyId && !!subjectId && conflictResult.canBook
+      : batchValidation.isValid);
 
   return (
     <Drawer
@@ -655,12 +711,32 @@ export function SlotDrawer() {
       onClose={closeSlotEditor}
       title={
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-primary-light flex items-center justify-center text-primary font-bold">
-            {duration === 2 ? <FlaskConical className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
+          <div
+            className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold ${
+              sessionType === 'recess'
+                ? 'bg-emerald-100 text-emerald-700'
+                : duration === 2
+                ? 'bg-highlight-light text-highlight'
+                : 'bg-primary-light text-primary'
+            }`}
+          >
+            {sessionType === 'recess' ? (
+              <Coffee className="w-4 h-4" />
+            ) : duration === 2 ? (
+              <FlaskConical className="w-4 h-4" />
+            ) : (
+              <Clock className="w-4 h-4" />
+            )}
           </div>
           <div>
             <h3 className="text-base font-bold text-foreground">
-              {assignmentId ? 'Edit Scheduled Slot' : 'Assign Time Slot'}
+              {assignmentId
+                ? sessionType === 'recess'
+                  ? 'Edit Recess Slot'
+                  : 'Edit Scheduled Slot'
+                : sessionType === 'recess'
+                ? 'Assign Recess Break'
+                : 'Assign Time Slot'}
             </h3>
             <p className="text-sm text-muted-foreground">
               {currentTargetName} ({selectedTargetType.toUpperCase()})
@@ -680,43 +756,94 @@ export function SlotDrawer() {
       }
     >
       <form key={`${assignmentId || 'new'}-${day}-${startSlot}`} onSubmit={handleSubmit} className="space-y-6">
-        {/* Slot Duration Selector */}
+        {/* Slot Duration & Type Single Line Nav */}
         <div>
           <label className="block text-xs font-bold text-foreground uppercase tracking-wider mb-2">
             Session Duration & Type
           </label>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="bg-surface-subtle border border-border p-1 rounded-xl flex items-center gap-1 w-full">
             <button
               type="button"
-              onClick={() => setDuration(1)}
-              className={`flex items-center justify-center gap-2 py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
-                duration === 1
-                  ? 'bg-primary-light border-primary text-primary shadow-xs'
-                  : 'bg-surface border-border text-muted hover:border-border-strong'
+              onClick={() => {
+                setSessionType('lecture');
+                setDuration(1);
+              }}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-1.5 rounded-lg text-xs font-bold transition-all truncate select-none ${
+                sessionType === 'lecture'
+                  ? 'bg-surface text-primary shadow-xs border border-primary/20 font-black'
+                  : 'text-muted hover:text-foreground hover:bg-surface/50'
               }`}
             >
-              <Clock className="w-4 h-4" />
-              1 Hour (Lecture)
+              <Clock className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">1 Hr (Lecture)</span>
             </button>
             <button
               type="button"
-              onClick={() => setDuration(2)}
-              className={`flex items-center justify-center gap-2 py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
-                duration === 2
-                  ? 'bg-highlight-light border-highlight text-highlight shadow-xs'
-                  : 'bg-surface border-border text-muted hover:border-border-strong'
+              onClick={() => {
+                setSessionType('lab');
+                setDuration(2);
+              }}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-1.5 rounded-lg text-xs font-bold transition-all truncate select-none ${
+                sessionType === 'lab'
+                  ? 'bg-surface text-highlight shadow-xs border border-highlight/20 font-black'
+                  : 'text-muted hover:text-foreground hover:bg-surface/50'
               }`}
             >
-              <FlaskConical className="w-4 h-4" />
-              2 Hours (4-Batch Lab)
+              <FlaskConical className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">2 Hr (4B Lab)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSessionType('recess');
+                setDuration(1);
+              }}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-1.5 rounded-lg text-xs font-bold transition-all truncate select-none ${
+                sessionType === 'recess'
+                  ? 'bg-emerald-100/90 text-emerald-900 border border-emerald-400 shadow-xs font-black'
+                  : 'text-muted hover:text-foreground hover:bg-surface/50'
+              }`}
+            >
+              <Coffee className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
+              <span className="truncate">Recess</span>
             </button>
           </div>
         </div>
 
         {/* ============================================================ */}
-        {/* 2-HOUR LAB 4-BATCH ALLOCATION (A1, A2, A3, A4)              */}
+        {/* RECESS VIEW                                                  */}
         {/* ============================================================ */}
-        {duration === 2 ? (
+        {sessionType === 'recess' ? (
+          <div className="p-5 rounded-2xl bg-gradient-to-br from-emerald-50 to-green-50/50 border-2 border-emerald-300 space-y-4 shadow-xs">
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center shadow-sm shrink-0">
+                <Coffee className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-sm font-extrabold text-emerald-950">Institutional Recess / Break</h4>
+                  <span className="text-[10px] font-mono font-bold bg-emerald-200/90 text-emerald-900 px-2 py-0.5 rounded-full border border-emerald-300">
+                    1 Hour Break
+                  </span>
+                </div>
+                <p className="text-xs text-emerald-800 mt-1 leading-relaxed">
+                  Designates this time slot as a formal recess / lunch break for <strong>{currentTargetName}</strong>.
+                  No faculty, subject, or laboratory bookings are required.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-white/90 rounded-xl border border-emerald-200 text-xs font-mono text-emerald-900 flex items-center justify-between">
+              <span className="font-semibold">Scheduled Interval:</span>
+              <span className="font-bold bg-emerald-100 text-emerald-950 px-2.5 py-1 rounded-md border border-emerald-200">
+                {day} • {currentSlotObj?.start} — {currentSlotObj?.end}
+              </span>
+            </div>
+          </div>
+        ) : duration === 2 ? (
+          /* ============================================================ */
+          /* 2-HOUR LAB 4-BATCH ALLOCATION (A1, A2, A3, A4)              */
+          /* ============================================================ */
           <div className="space-y-5">
             <div className="flex items-center justify-between pb-1 border-b border-border">
               <div className="flex items-center gap-2">
@@ -1183,7 +1310,15 @@ export function SlotDrawer() {
               ) : (
                 <Sparkles className="w-4 h-4" />
               )}
-              {isSaving ? 'Saving...' : assignmentId ? 'Save Changes' : 'Confirm Assignment'}
+              {isSaving
+                ? 'Saving...'
+                : sessionType === 'recess'
+                ? assignmentId
+                  ? 'Save Recess'
+                  : 'Confirm Recess'
+                : assignmentId
+                ? 'Save Changes'
+                : 'Confirm Assignment'}
             </Button>
           </div>
         </div>

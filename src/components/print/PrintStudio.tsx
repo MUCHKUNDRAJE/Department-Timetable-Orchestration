@@ -203,19 +203,33 @@ export function PrintStudio() {
       </div>
 
       {/* Main Single Document Live Preview Container */}
-      <div className="printable-area overflow-x-auto">
-        <PrintPreviewSheet
-          ref={printSheetRef}
-          mode={activeMode}
-          targetId={selectedTargetId}
-          classes={classes}
-          labs={labs}
-          rooms={rooms}
-          facultyList={faculty}
-          subjects={subjects}
-          assignments={assignments}
-        />
-      </div>
+      {currentList.length === 0 ? (
+        <div className="bg-surface border border-border rounded-2xl p-12 text-center shadow-subtle space-y-3">
+          <div className="w-12 h-12 rounded-2xl bg-primary-light text-primary mx-auto flex items-center justify-center">
+            <Printer className="w-6 h-6" />
+          </div>
+          <h3 className="text-base font-bold text-foreground">
+            No {activeMode.toUpperCase()} Records Available
+          </h3>
+          <p className="text-xs text-muted-foreground max-w-md mx-auto">
+            The database currently has no {activeMode === 'ug' ? 'classes' : activeMode === 'lab' ? 'labs' : activeMode === 'room' ? 'rooms' : 'faculty'} created. Visit the Manage Data studio to add institutional records.
+          </p>
+        </div>
+      ) : (
+        <div className="printable-area overflow-x-auto">
+          <PrintPreviewSheet
+            ref={printSheetRef}
+            mode={activeMode}
+            targetId={selectedTargetId}
+            classes={classes}
+            labs={labs}
+            rooms={rooms}
+            facultyList={faculty}
+            subjects={subjects}
+            assignments={assignments}
+          />
+        </div>
+      )}
 
       {/* Hidden container for generating all sheets during Bulk Export */}
       <div

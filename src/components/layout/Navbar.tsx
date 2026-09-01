@@ -3,13 +3,15 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Calendar, Printer, Database, LayoutGrid, Sparkles, RotateCcw, Building2, LogOut, User } from 'lucide-react';
+import { Calendar, Printer, Database, LayoutGrid, Sparkles, RotateCcw, Building2, LogOut, User, Lock, AlertTriangle, Eye, EyeOff } from 'lucide-react';
 import { useTimetableStore } from '@/lib/store';
 import { useAuthStore } from '@/lib/auth-store';
 import { INSTITUTION_INFO } from '@/lib/constants';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
+import { Modal } from '@/components/ui/Modal';
+import { Button } from '@/components/ui/Button';
 
 export function Navbar() {
   const pathname = usePathname();
@@ -19,6 +21,10 @@ export function Navbar() {
   const faculty = useTimetableStore((s) => s.faculty);
 
   const { user, isAuthenticated, logout } = useAuthStore();
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [resetPassword, setResetPassword] = useState('');
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
   const [isResetting, setIsResetting] = useState(false);
 
   const isAuthPage = pathname === '/login' || pathname === '/signup';
@@ -36,17 +42,34 @@ export function Navbar() {
     router.replace('/login');
   };
 
-  const handleResetData = async () => {
-    if (confirm('Reset system data back to institutional default seed records?')) {
-      setIsResetting(true);
-      try {
-        await resetToSeedData();
-        toast.success('Database Reset Complete', 'Restored all institutional classes, labs, faculty, and schedule.');
-      } catch (err: any) {
-        toast.error('Reset Failed', err.message || 'Could not reset data.');
-      } finally {
-        setIsResetting(false);
-      }
+  const handleOpenResetModal = () => {
+    setResetPassword('');
+    setResetError(null);
+    setIsResetModalOpen(true);
+  };
+
+  const handleExecuteReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetPassword) {
+      setResetError('Please enter your password to confirm system reset.');
+      return;
+    }
+    setIsResetting(true);
+    setResetError(null);
+    try {
+      await resetToSeedData(resetPassword);
+      toast.success(
+        'Database Reset Complete',
+        'All institutional classes, labs, faculty, rooms, and schedule have been reset.'
+      );
+      setIsResetModalOpen(false);
+      setResetPassword('');
+    } catch (err: any) {
+      const msg = err.message || 'Authentication failed. Incorrect password.';
+      setResetError(msg);
+      toast.error('Reset Authorization Failed', msg);
+    } finally {
+      setIsResetting(false);
     }
   };
 
@@ -112,11 +135,11 @@ export function Navbar() {
                   </span>
                 </div>
 
-                <button
-                  onClick={handleResetData}
+                {/* <button
+                  onClick={handleOpenResetModal}
                   disabled={isResetting}
-                  title="Reset to default seed data"
-                  className="p-2 rounded-xl text-muted hover:text-foreground hover:bg-surface-subtle border border-border transition-colors flex items-center gap-1.5 text-xs font-medium disabled:opacity-60"
+                  title="Reset to default seed data (Password Required)"
+                  className="p-2 rounded-xl text-muted hover:text-foreground hover:bg-surface-subtle border border-border transition-colors flex items-center gap-1.5 text-xs font-medium disabled:opacity-60 cursor-pointer"
                 >
                   {isResetting ? (
                     <span className="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
@@ -124,7 +147,7 @@ export function Navbar() {
                     <RotateCcw className="w-3.5 h-3.5" />
                   )}
                   <span className="hidden sm:inline">{isResetting ? 'Resetting...' : 'Reset Data'}</span>
-                </button>
+                </button> */}
 
                 {/* Logged in user profile & Logout */}
                 <div className="flex items-center gap-2 pl-2 border-l border-border">
@@ -160,6 +183,92 @@ export function Navbar() {
           </div>
         </div>
       </div>
+
+      {/* Password-Protected Reset Modal */}
+      <Modal
+        isOpen={isResetModalOpen}
+        onClose={() => {
+          if (!isResetting) {
+            setIsResetModalOpen(false);
+            setResetPassword('');
+            setResetError(null);
+          }
+        }}
+        title="Security Verification: Reset System Data"
+        description="This action will delete and restore all timetable assignments and records back to default state. Please enter your user password to authorize."
+      >
+        <form onSubmit={handleExecuteReset} className="space-y-4">
+          <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-3 text-rose-800 text-xs">
+            <AlertTriangle className="w-5 h-5 shrink-0 text-rose-600 mt-0.5" />
+            <div className="space-y-1">
+              <strong className="text-rose-900 block font-bold">Admin Authentication Required</strong>
+              <span>
+                For institutional security, data deletion requires password confirmation. Entering the correct password will wipe and re-initialize the database.
+              </span>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-foreground uppercase tracking-wider mb-1.5">
+              Account Password *
+            </label>
+            <div className="relative">
+              <input
+                type={showResetPassword ? 'text' : 'password'}
+                value={resetPassword}
+                onChange={(e) => setResetPassword(e.target.value)}
+                placeholder="Enter your login password"
+                autoFocus
+                className="w-full px-3 py-2 text-xs rounded-xl border border-border bg-surface text-foreground placeholder:text-muted focus:outline-none focus:border-primary pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowResetPassword(!showResetPassword)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted hover:text-foreground"
+              >
+                {showResetPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          {resetError && (
+            <div className="p-2.5 bg-rose-100 border border-rose-300 rounded-lg text-rose-800 text-xs font-semibold flex items-center gap-1.5">
+              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{resetError}</span>
+            </div>
+          )}
+
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
+            <Button
+              type="button"
+              variant="ghost"
+              size="md"
+              onClick={() => {
+                setIsResetModalOpen(false);
+                setResetPassword('');
+                setResetError(null);
+              }}
+              disabled={isResetting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="danger"
+              size="md"
+              disabled={isResetting || !resetPassword}
+              className="gap-2 font-bold"
+            >
+              {isResetting ? (
+                <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+              ) : (
+                <Lock className="w-4 h-4" />
+              )}
+              {isResetting ? 'Verifying & Resetting...' : 'Authenticate & Reset'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </header>
   );
 }

@@ -32,7 +32,7 @@ export function calculateFacultyAllocatedHours(
   excludeAssignmentId?: string
 ): number {
   return assignments
-    .filter((a) => a.facultyId === facultyId && a.id !== excludeAssignmentId)
+    .filter((a) => !a.isRecess && a.facultyId === facultyId && a.id !== excludeAssignmentId)
     .reduce((sum, a) => sum + (a.duration || 1), 0);
 }
 
