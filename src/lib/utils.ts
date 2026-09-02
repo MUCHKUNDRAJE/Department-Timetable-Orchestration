@@ -54,12 +54,20 @@ export function getFacultyInitials(
  * Generates clean subject acronym / initials (e.g., "Cloud Computing Lab" -> "CC", "Optimum Theory" -> "OT")
  */
 export function getSubjectInitials(
-  subject?: Subject | { name: string; type?: string; code?: string },
+  subject?: Subject | { name: string; type?: string; code?: string; abbreviation?: string },
   includeLabSuffix = false
 ): string {
   if (!subject) return 'SUBJ';
+  const isLab = subject.type === 'lab' || (subject.name && subject.name.toLowerCase().includes('lab'));
+
+  if (subject.abbreviation && subject.abbreviation.trim()) {
+    const customAbbr = subject.abbreviation.trim().toUpperCase();
+    return isLab && includeLabSuffix && !customAbbr.toLowerCase().includes('lab')
+      ? `${customAbbr} (Lab)`
+      : customAbbr;
+  }
+
   const name = subject.name || '';
-  const isLab = subject.type === 'lab' || name.toLowerCase().includes('lab');
 
   // Strip "Lab", "Laboratory", punctuation, and common connector words
   const baseName = name

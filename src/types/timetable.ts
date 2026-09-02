@@ -17,6 +17,7 @@ export interface CollegeClass {
   semester: number;
   section: string;
   studentCount?: number;
+  classTeacherId?: string; // ID of faculty assigned as Class Teacher
 }
 
 export interface Lab {
@@ -39,6 +40,7 @@ export interface Subject {
   id: string;
   name: string;
   code: string;
+  abbreviation?: string; // Short code (e.g. DL, NLP, OT) for compact displays
   type: 'lecture' | 'lab';
   color: string;
   department: string;
@@ -50,7 +52,8 @@ export interface Faculty {
   name: string;
   nickname?: string; // Optional short code / initials (e.g. KK, SV, VAP)
   department: string;
-  designation: string;
+  designation: string; // Academic designation (e.g. Professor, Assistant Professor)
+  roles?: string[]; // Special roles e.g. ['Timetable Incharge', 'Head of Department (HOD)']
   email: string;
   maxWeeklyHours: number; // default 20
   subjectIds: string[]; // subjects taught

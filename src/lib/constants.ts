@@ -31,5 +31,4 @@ export const INSTITUTION_INFO = {
   effectiveDate: 'August 10, 2026',
   deanName: 'Dr. Sarah Vance, Ph.D.',
   hodName: 'Dr. Rajesh Raman, M.Tech, Ph.D.',
-  coordinatorName: 'Prof. Ananya Sen, Timetable Chair',
 };

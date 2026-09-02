@@ -1,7 +1,7 @@
 import jsPDF from 'jspdf';
 import { toPng } from 'html-to-image';
 
-const CAPTURE_WIDTH = 1200; // Fixed render width — matches the sheet max-w-[1200px]
+const CAPTURE_WIDTH = 1200; // Fixed render width — matches the standard sheet max-w-[1200px]
 
 /**
  * Creates an off-screen clone of the element at a fixed pixel width so that
@@ -57,7 +57,8 @@ async function captureElement(element: HTMLElement): Promise<{ dataUrl: string; 
 
 /**
  * High-fidelity Snapshot-based PDF Exporter.
- * Supports multi-page output when content is taller than a single A4 landscape page.
+ * Scales content proportionally to fit seamlessly on a single A4 landscape page
+ * so no tables, headers, or matrices are sliced or broken across pages.
  */
 export async function exportElementToPdf(
   element: HTMLElement,
@@ -70,41 +71,34 @@ export async function exportElementToPdf(
     const pdf = new jsPDF({ orientation, unit: 'mm', format: 'a4' });
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-    const margin = 10;
+    const margin = 6;
     const availableWidth = pageWidth - margin * 2;
-    const availableHeight = pageHeight - margin * 2;
+    const availableHeight = pageHeight - margin * 2 - 4; // reserve 4mm for bottom watermark
 
-    const scale = availableWidth / w;
-    const scaledTotalHeight = h * scale;
-    const totalPages = Math.ceil(scaledTotalHeight / availableHeight);
+    // Fit content proportionally onto the single page
+    const scale = Math.min(availableWidth / w, availableHeight / h);
+    const renderWidth = w * scale;
+    const renderHeight = h * scale;
+    const offsetX = margin + (availableWidth - renderWidth) / 2;
+    const offsetY = margin + (availableHeight - renderHeight) / 2;
 
-    for (let page = 0; page < totalPages; page++) {
-      if (page > 0) pdf.addPage();
+    pdf.addImage(
+      dataUrl, 'PNG',
+      offsetX, offsetY,
+      renderWidth, renderHeight,
+      undefined, 'FAST'
+    );
 
-      // Render full image shifted up so this page's slice is at the top
-      pdf.addImage(
-        dataUrl, 'PNG',
-        margin, margin - page * availableHeight,
-        availableWidth, scaledTotalHeight,
-        undefined, 'FAST'
-      );
-
-      // White mask strips to clip content outside this page's visible slice
-      pdf.setFillColor(255, 255, 255);
-      pdf.rect(0, 0, pageWidth, margin, 'F');
-      pdf.rect(0, pageHeight - margin, pageWidth, margin, 'F');
-
-      // PDF Watermark Footer
-      pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(8);
-      pdf.setTextColor(140, 145, 160);
-      pdf.text(
-        'Timetable Allocator · Created by Muchkundraje Thote',
-        pageWidth / 2,
-        pageHeight - 3.5,
-        { align: 'center' }
-      );
-    }
+    // PDF Watermark Footer
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(7.5);
+    pdf.setTextColor(140, 145, 160);
+    pdf.text(
+      'Timetable Allocator · Created by Muchkundraje Thote',
+      pageWidth / 2,
+      pageHeight - 2.5,
+      { align: 'center' }
+    );
 
     pdf.save(`${filename}.pdf`);
     return true;
@@ -115,7 +109,7 @@ export async function exportElementToPdf(
 }
 
 /**
- * Bulk Multi-page PDF Snapshot Exporter — each entity gets its own page(s).
+ * Bulk Multi-page PDF Snapshot Exporter — each entity gets exactly one clean page.
  */
 export async function exportMultipleElementsToPdf(
   elements: { element: HTMLElement; title: string }[],
@@ -126,9 +120,9 @@ export async function exportMultipleElementsToPdf(
     const pdf = new jsPDF({ orientation, unit: 'mm', format: 'a4' });
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-    const margin = 8;
+    const margin = 6;
     const availableWidth = pageWidth - margin * 2;
-    const availableHeight = pageHeight - margin * 2;
+    const availableHeight = pageHeight - margin * 2 - 4;
 
     for (let i = 0; i < elements.length; i++) {
       const { element } = elements[i];
@@ -136,35 +130,29 @@ export async function exportMultipleElementsToPdf(
 
       const { dataUrl, w, h } = await captureElement(element);
 
-      const scale = availableWidth / w;
-      const scaledTotalHeight = h * scale;
-      const totalPages = Math.ceil(scaledTotalHeight / availableHeight);
+      const scale = Math.min(availableWidth / w, availableHeight / h);
+      const renderWidth = w * scale;
+      const renderHeight = h * scale;
+      const offsetX = margin + (availableWidth - renderWidth) / 2;
+      const offsetY = margin + (availableHeight - renderHeight) / 2;
 
-      for (let page = 0; page < totalPages; page++) {
-        if (page > 0) pdf.addPage();
+      pdf.addImage(
+        dataUrl, 'PNG',
+        offsetX, offsetY,
+        renderWidth, renderHeight,
+        undefined, 'FAST'
+      );
 
-        pdf.addImage(
-          dataUrl, 'PNG',
-          margin, margin - page * availableHeight,
-          availableWidth, scaledTotalHeight,
-          undefined, 'FAST'
-        );
-
-        pdf.setFillColor(255, 255, 255);
-        pdf.rect(0, 0, pageWidth, margin, 'F');
-        pdf.rect(0, pageHeight - margin, pageWidth, margin, 'F');
-
-        // PDF Watermark Footer
-        pdf.setFont('helvetica', 'normal');
-        pdf.setFontSize(8);
-        pdf.setTextColor(140, 145, 160);
-        pdf.text(
-          'Timetable Allocator · Created by Muchkundraje Thote',
-          pageWidth / 2,
-          pageHeight - 3.5,
-          { align: 'center' }
-        );
-      }
+      // PDF Watermark Footer
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(7.5);
+      pdf.setTextColor(140, 145, 160);
+      pdf.text(
+        'Timetable Allocator · Created by Muchkundraje Thote',
+        pageWidth / 2,
+        pageHeight - 2.5,
+        { align: 'center' }
+      );
     }
 
     pdf.save(`${filename}.pdf`);

@@ -12,9 +12,10 @@ import {
   Layers,
   Sparkles,
   Archive,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { useTimetableStore } from '@/lib/store';
-import { PrintMode } from '@/types/timetable';
+import { PrintMode, CollegeClass } from '@/types/timetable';
 import { Button } from '@/components/ui/Button';
 import {
   Select,
@@ -25,12 +26,15 @@ import {
 } from '@/components/ui/select';
 import { PrintPreviewSheet } from './PrintPreviewSheet';
 import { exportElementToPdf, exportMultipleElementsToPdf, printElementDirectly } from '@/lib/pdf-export';
+import { exportClassTimetableToExcel, exportAllClassesToExcel } from '@/lib/excel-export';
 import { cn } from '@/lib/utils';
 
 export function PrintStudio() {
   const [activeMode, setActiveMode] = useState<PrintMode>('ug');
   const [isExporting, setIsExporting] = useState(false);
   const [isBulkExporting, setIsBulkExporting] = useState(false);
+  const [isExcelExporting, setIsExcelExporting] = useState(false);
+  const [isBulkExcelExporting, setIsBulkExcelExporting] = useState(false);
 
   const classes = useTimetableStore((s) => s.classes);
   const labs = useTimetableStore((s) => s.labs);
@@ -69,6 +73,41 @@ export function PrintStudio() {
     const filename = `${activeMode.toUpperCase()}_Timetable_${currentEntity?.name.replace(/[^a-zA-Z0-9]/g, '_')}`;
     await exportElementToPdf(printSheetRef.current, filename, 'landscape');
     setIsExporting(false);
+  };
+
+  // Single Excel (.xlsx) Export Handler
+  const handleExportSingleExcel = async () => {
+    setIsExcelExporting(true);
+    const targetClass = activeMode === 'ug'
+      ? (currentEntity as CollegeClass)
+      : classes[0];
+
+    if (targetClass) {
+      await exportClassTimetableToExcel({
+        cls: targetClass,
+        classes,
+        facultyList: faculty,
+        subjects,
+        rooms,
+        labs,
+        assignments,
+      });
+    }
+    setIsExcelExporting(false);
+  };
+
+  // Bulk Excel (.xlsx Multi-Sheet Workbook) Export Handler
+  const handleBulkExportExcel = async () => {
+    setIsBulkExcelExporting(true);
+    await exportAllClassesToExcel(
+      classes,
+      faculty,
+      subjects,
+      rooms,
+      labs,
+      assignments
+    );
+    setIsBulkExcelExporting(false);
   };
 
   // Browser Direct Print Dialog with isolated print engine
@@ -167,15 +206,15 @@ export function PrintStudio() {
         </div>
 
         {/* Action Controls */}
-        <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto justify-end">
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-end">
           <Button
             variant="outline"
             size="md"
             onClick={handleBrowserPrint}
-            className="gap-2 text-xs font-bold"
+            className="gap-1.5 text-xs font-bold"
           >
             <Printer className="w-4 h-4 text-muted" />
-            Print Timetable
+            Print
           </Button>
 
           <Button
@@ -183,10 +222,21 @@ export function PrintStudio() {
             size="md"
             onClick={handleExportSinglePdf}
             isLoading={isExporting}
-            className="gap-2 text-xs font-bold"
+            className="gap-1.5 text-xs font-bold"
           >
             <Download className="w-4 h-4 text-primary" />
-            Export to PDF
+            PDF
+          </Button>
+
+          <Button
+            variant="secondary"
+            size="md"
+            onClick={handleExportSingleExcel}
+            isLoading={isExcelExporting}
+            className="gap-1.5 text-xs font-bold border-emerald-500/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            Excel (.xlsx)
           </Button>
 
           <Button
@@ -194,10 +244,21 @@ export function PrintStudio() {
             size="md"
             onClick={handleBulkExport}
             isLoading={isBulkExporting}
-            className="gap-2 text-xs font-bold"
+            className="gap-1.5 text-xs font-bold"
           >
             <Archive className="w-4 h-4" />
-            Save All ({currentList.length} Multi-Page PDF)
+            All PDF
+          </Button>
+
+          <Button
+            variant="primary"
+            size="md"
+            onClick={handleBulkExportExcel}
+            isLoading={isBulkExcelExporting}
+            className="gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            All Excel (.xlsx)
           </Button>
         </div>
       </div>

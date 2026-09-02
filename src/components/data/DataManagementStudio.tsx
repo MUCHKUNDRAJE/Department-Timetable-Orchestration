@@ -31,7 +31,7 @@ import { Drawer } from '@/components/ui/Drawer';
 import { Modal } from '@/components/ui/Modal';
 import { toast } from '@/lib/toast';
 import { calculateFacultyAllocatedHours } from '@/lib/conflict-checker';
-import { cn, getFacultyInitials } from '@/lib/utils';
+import { cn, getFacultyInitials, getSubjectInitials } from '@/lib/utils';
 
 type EntityTab = 'classes' | 'labs' | 'rooms' | 'faculty' | 'subjects';
 
@@ -152,6 +152,7 @@ export function DataManagementStudio() {
         semester: 7,
         section: 'A',
         studentCount: 60,
+        classTeacherId: '',
       });
     } else if (activeTab === 'labs') {
       setFormData({
@@ -173,6 +174,7 @@ export function DataManagementStudio() {
         nickname: '',
         department: 'Artificial Intelligence & Data Science',
         designation: 'Assistant Professor',
+        roles: [],
         email: '',
         maxWeeklyHours: 20,
         subjectIds: [],
@@ -181,6 +183,7 @@ export function DataManagementStudio() {
       setFormData({
         name: '',
         code: '',
+        abbreviation: '',
         type: 'lecture',
         color: '#5755FE',
         department: 'AIDS',
@@ -497,6 +500,7 @@ export function DataManagementStudio() {
               <thead className="bg-surface-subtle border-b border-border text-xs font-bold text-muted-foreground uppercase tracking-wider">
                 <tr>
                   <th className="p-4">Class Name</th>
+                  <th className="p-4">Class Teacher</th>
                   <th className="p-4">Department</th>
                   <th className="p-4">Semester</th>
                   <th className="p-4">Section</th>
@@ -507,37 +511,52 @@ export function DataManagementStudio() {
               <tbody className="divide-y divide-border">
                 {classes
                   .filter((c) => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
-                  .map((c) => (
-                    <tr key={c.id} className="hover:bg-surface-hover transition-colors">
-                      <td className="p-4 font-bold text-foreground">{c.name}</td>
-                      <td className="p-4 text-muted-foreground">{c.department}</td>
-                      <td className="p-4">
-                        <Badge variant="primary" size="sm">
-                          Sem {c.semester}
-                        </Badge>
-                      </td>
-                      <td className="p-4 font-mono font-bold text-foreground">{c.section}</td>
-                      <td className="p-4 font-mono text-muted">{c.studentCount || 60}</td>
-                      <td className="p-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => handleOpenEdit(c)}
-                            className="p-1.5 rounded-lg text-muted hover:text-primary hover:bg-primary-light transition-colors"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() =>
-                              setDeleteCandidate({ id: c.id, name: c.name, type: 'classes' })
-                            }
-                            className="p-1.5 rounded-lg text-muted hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  .map((c) => {
+                    const teacher = faculty.find((f) => f.id === c.classTeacherId);
+                    return (
+                      <tr key={c.id} className="hover:bg-surface-hover transition-colors">
+                        <td className="p-4 font-bold text-foreground">{c.name}</td>
+                        <td className="p-4">
+                          {teacher ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                [{getFacultyInitials(teacher)}]
+                              </span>
+                              <span className="font-semibold text-foreground text-xs">{teacher.name}</span>
+                            </div>
+                          ) : (
+                            <span className="text-muted text-xs italic">Unassigned</span>
+                          )}
+                        </td>
+                        <td className="p-4 text-muted-foreground">{c.department}</td>
+                        <td className="p-4">
+                          <Badge variant="primary" size="sm">
+                            Sem {c.semester}
+                          </Badge>
+                        </td>
+                        <td className="p-4 font-mono font-bold text-foreground">{c.section}</td>
+                        <td className="p-4 font-mono text-muted">{c.studentCount || 60}</td>
+                        <td className="p-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => handleOpenEdit(c)}
+                              className="p-1.5 rounded-lg text-muted hover:text-primary hover:bg-primary-light transition-colors"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() =>
+                                setDeleteCandidate({ id: c.id, name: c.name, type: 'classes' })
+                              }
+                              className="p-1.5 rounded-lg text-muted hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
               </tbody>
             </table>
           </div>
@@ -653,7 +672,7 @@ export function DataManagementStudio() {
               <thead className="bg-surface-subtle border-b border-border text-xs font-bold text-muted-foreground uppercase tracking-wider">
                 <tr>
                   <th className="p-4">Faculty Name</th>
-                  <th className="p-4">Designation</th>
+                  <th className="p-4">Designation & Roles</th>
                   <th className="p-4">Weekly Load</th>
                   <th className="p-4">Assigned Subjects</th>
                   <th className="p-4 text-right">Actions</th>
@@ -665,6 +684,8 @@ export function DataManagementStudio() {
                   .map((f) => {
                     const hours = calculateFacultyAllocatedHours(f.id, assignments);
                     const facultySubjects = subjects.filter((s) => f.subjectIds.includes(s.id));
+                    const isHod = f.roles?.includes('Head of Department (HOD)');
+                    const isIncharge = f.roles?.includes('Timetable Incharge');
                     return (
                       <tr key={f.id} className="hover:bg-surface-hover transition-colors">
                         <td className="p-4">
@@ -678,7 +699,23 @@ export function DataManagementStudio() {
                             </div>
                           </div>
                         </td>
-                        <td className="p-4 text-muted-foreground">{f.designation}</td>
+                        <td className="p-4">
+                          <div className="flex flex-col gap-1 items-start">
+                            <span className="text-xs font-medium text-foreground">{f.designation}</span>
+                            <div className="flex items-center gap-1 flex-wrap">
+                              {isHod && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-rose-100 text-rose-800 border border-rose-200">
+                                  HOD
+                                </span>
+                              )}
+                              {isIncharge && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-indigo-100 text-indigo-800 border border-indigo-200">
+                                  Timetable Incharge
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </td>
                         <td className="p-4">
                           <Badge
                             variant={hours >= f.maxWeeklyHours ? 'warning' : 'success'}
@@ -693,8 +730,9 @@ export function DataManagementStudio() {
                               <span
                                 key={s.id}
                                 className="text-[10px] font-mono font-bold bg-surface-subtle px-1.5 py-0.5 rounded border border-border"
+                                title={s.name}
                               >
-                                {s.code}
+                                {s.abbreviation || s.code}
                               </span>
                             ))}
                           </div>
@@ -731,6 +769,7 @@ export function DataManagementStudio() {
             <table className="w-full text-left text-sm">
               <thead className="bg-surface-subtle border-b border-border text-xs font-bold text-muted-foreground uppercase tracking-wider">
                 <tr>
+                  <th className="p-4">Abbr</th>
                   <th className="p-4">Code</th>
                   <th className="p-4">Subject Name</th>
                   <th className="p-4">Type</th>
@@ -740,11 +779,16 @@ export function DataManagementStudio() {
               </thead>
               <tbody className="divide-y divide-border">
                 {subjects
-                  .filter((s) => s.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                  .filter((s) => s.name.toLowerCase().includes(searchQuery.toLowerCase()) || (s.abbreviation && s.abbreviation.toLowerCase().includes(searchQuery.toLowerCase())))
                   .map((s) => (
                     <tr key={s.id} className="hover:bg-surface-hover transition-colors">
                       <td className="p-4">
-                        <span className="font-mono font-extrabold text-xs bg-primary-light text-primary px-2 py-1 rounded">
+                        <span className="font-mono font-black text-xs bg-indigo-50 text-indigo-900 border border-indigo-200 px-2 py-0.5 rounded">
+                          [{s.abbreviation || getSubjectInitials(s)}]
+                        </span>
+                      </td>
+                      <td className="p-4">
+                        <span className="font-mono font-semibold text-xs bg-surface-subtle text-foreground border border-border px-2 py-0.5 rounded">
                           {s.code}
                         </span>
                       </td>
@@ -826,7 +870,7 @@ export function DataManagementStudio() {
                   </label>
                   <input
                     type="text"
-                    value={formData.section || 'A'}
+                    value={formData.section ?? ''}
                     onChange={(e) => setFormData({ ...formData, section: e.target.value })}
                     className="w-full bg-surface border border-border rounded-xl px-3.5 py-2 text-sm text-foreground focus:ring-2 focus:ring-accent"
                   />
@@ -838,10 +882,30 @@ export function DataManagementStudio() {
                 </label>
                 <input
                   type="text"
-                  value={formData.department || 'Artificial Intelligence & Data Science'}
+                  value={formData.department ?? ''}
                   onChange={(e) => setFormData({ ...formData, department: e.target.value })}
                   className="w-full bg-surface border border-border rounded-xl px-3.5 py-2 text-sm text-foreground focus:ring-2 focus:ring-accent"
                 />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-foreground uppercase mb-1">
+                  Class Teacher (Faculty Incharge)
+                </label>
+                <select
+                  value={formData.classTeacherId || ''}
+                  onChange={(e) => setFormData({ ...formData, classTeacherId: e.target.value || undefined })}
+                  className="w-full bg-surface border border-border rounded-xl px-3.5 py-2 text-sm text-foreground focus:ring-2 focus:ring-accent"
+                >
+                  <option value="">-- No Class Teacher Assigned --</option>
+                  {faculty.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.name} ({getFacultyInitials(f)}) — {f.designation}
+                    </option>
+                  ))}
+                </select>
+                <span className="text-[11px] text-muted-foreground mt-1 block">
+                  Assigning a Class Teacher displays their name on this class timetable and tags this class in their faculty profile.
+                </span>
               </div>
             </>
           )}
@@ -937,112 +1001,198 @@ export function DataManagementStudio() {
           )}
 
           {/* Faculty Form */}
-          {activeTab === 'faculty' && (
-            <>
-              <div>
-                <label className="block text-xs font-bold text-foreground uppercase mb-1">
-                  Faculty Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Dr. Sarah Vance"
-                  value={formData.name || ''}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full bg-surface border border-border rounded-xl px-3.5 py-2 text-sm text-foreground focus:ring-2 focus:ring-accent"
-                />
-              </div>
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-bold text-foreground uppercase">
-                    Faculty Nickname / Short Code
-                  </label>
-                  <span className="text-[10.5px] text-muted-foreground font-mono">
-                    Auto-generates capital initials if empty
-                  </span>
-                </div>
-                <input
-                  type="text"
-                  placeholder="e.g. SV, KK, VAP (Optional)"
-                  value={formData.nickname || ''}
-                  onChange={(e) =>
-                    setFormData({ ...formData, nickname: e.target.value.toUpperCase() })
-                  }
-                  className="w-full bg-surface border border-border rounded-xl px-3.5 py-2 text-sm font-mono uppercase text-foreground focus:ring-2 focus:ring-accent"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
+          {activeTab === 'faculty' && (() => {
+            const currentRoles: string[] = formData.roles || [];
+            const otherHod = faculty.find(
+              (f) => f.id !== editingItem?.id && f.roles?.includes('Head of Department (HOD)')
+            );
+            const otherIncharges = faculty.filter(
+              (f) => f.id !== editingItem?.id && f.roles?.includes('Timetable Incharge')
+            );
+            const inchargeCount = otherIncharges.length + (currentRoles.includes('Timetable Incharge') ? 1 : 0);
+            const isInchargeDisabled = otherIncharges.length >= 5 && !currentRoles.includes('Timetable Incharge');
+
+            return (
+              <>
                 <div>
                   <label className="block text-xs font-bold text-foreground uppercase mb-1">
-                    Designation
+                    Faculty Name *
                   </label>
                   <input
                     type="text"
-                    value={formData.designation || 'Assistant Professor'}
-                    onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
+                    required
+                    placeholder="e.g. Dr. Sarah Vance"
+                    value={formData.name || ''}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     className="w-full bg-surface border border-border rounded-xl px-3.5 py-2 text-sm text-foreground focus:ring-2 focus:ring-accent"
                   />
                 </div>
                 <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-foreground uppercase">
+                      Faculty Nickname / Short Code
+                    </label>
+                    <span className="text-[10.5px] text-muted-foreground font-mono">
+                      Auto-generates capital initials if empty
+                    </span>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="e.g. SV, KK, VAP (Optional)"
+                    value={formData.nickname || ''}
+                    onChange={(e) =>
+                      setFormData({ ...formData, nickname: e.target.value.toUpperCase() })
+                    }
+                    className="w-full bg-surface border border-border rounded-xl px-3.5 py-2 text-sm font-mono uppercase text-foreground focus:ring-2 focus:ring-accent"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-foreground uppercase mb-1">
+                      Designation
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.designation ?? ''}
+                      onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
+                      placeholder="e.g. Assistant Professor"
+                      className="w-full bg-surface border border-border rounded-xl px-3.5 py-2 text-sm text-foreground focus:ring-2 focus:ring-accent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-foreground uppercase mb-1">
+                      Max Hours / Week
+                    </label>
+                    <input
+                      type="number"
+                      min={4}
+                      max={40}
+                      value={formData.maxWeeklyHours || 20}
+                      onChange={(e) =>
+                        setFormData({ ...formData, maxWeeklyHours: parseInt(e.target.value) })
+                      }
+                      className="w-full bg-surface border border-border rounded-xl px-3.5 py-2 text-sm text-foreground focus:ring-2 focus:ring-accent"
+                    />
+                  </div>
+                </div>
+
+                {/* Special Designations / Roles Assignment */}
+                <div className="p-3 bg-surface-subtle border border-border rounded-xl space-y-2.5">
+                  <label className="block text-xs font-bold text-foreground uppercase">
+                    Institutional Roles & Responsibilities
+                  </label>
+
+                  {/* Timetable Incharge */}
+                  <div className="flex items-start gap-2.5">
+                    <input
+                      type="checkbox"
+                      id="role-timetable-incharge"
+                      checked={currentRoles.includes('Timetable Incharge')}
+                      disabled={isInchargeDisabled}
+                      onChange={(e) => {
+                        const updated = e.target.checked
+                          ? [...currentRoles, 'Timetable Incharge']
+                          : currentRoles.filter((r) => r !== 'Timetable Incharge');
+                        setFormData({ ...formData, roles: updated });
+                      }}
+                      className="mt-0.5 rounded text-primary focus:ring-accent"
+                    />
+                    <div className="flex-1 text-xs">
+                      <label htmlFor="role-timetable-incharge" className="font-bold text-foreground cursor-pointer flex items-center gap-2">
+                        Timetable Incharge
+                        <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                          {inchargeCount} / 5 Assigned
+                        </span>
+                      </label>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Multiple faculty can hold this role (maximum limit: 5). Listed in Publishing Studio tables & signatures.
+                      </p>
+                      {isInchargeDisabled && (
+                        <p className="text-[10.5px] text-amber-600 font-medium mt-0.5">
+                          Maximum limit of 5 Timetable Incharges reached. Uncheck on another faculty to reassign.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Head of Department (HOD) */}
+                  <div className="flex items-start gap-2.5 pt-2 border-t border-border/60">
+                    <input
+                      type="checkbox"
+                      id="role-hod"
+                      checked={currentRoles.includes('Head of Department (HOD)')}
+                      onChange={(e) => {
+                        const updated = e.target.checked
+                          ? [...currentRoles.filter((r) => r !== 'Head of Department (HOD)'), 'Head of Department (HOD)']
+                          : currentRoles.filter((r) => r !== 'Head of Department (HOD)');
+                        setFormData({ ...formData, roles: updated });
+                      }}
+                      className="mt-0.5 rounded text-rose-600 focus:ring-rose-500"
+                    />
+                    <div className="flex-1 text-xs">
+                      <label htmlFor="role-hod" className="font-bold text-foreground cursor-pointer flex items-center gap-2">
+                        Head of Department (HOD)
+                        <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-rose-50 text-rose-700 border border-rose-200">
+                          Max 1 Allowed
+                        </span>
+                      </label>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Only one faculty member can hold the HOD role at any time. Displayed in Publishing Studio & official signoffs.
+                      </p>
+                      {otherHod && (
+                        <p className="text-[10.5px] text-amber-700 font-medium mt-0.5">
+                          ⚠️ Note: Currently held by <strong>{otherHod.name}</strong>. Checking this will reassign HOD to this faculty.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div>
                   <label className="block text-xs font-bold text-foreground uppercase mb-1">
-                    Max Hours / Week
+                    Email
                   </label>
                   <input
-                    type="number"
-                    min={4}
-                    max={40}
-                    value={formData.maxWeeklyHours || 20}
-                    onChange={(e) =>
-                      setFormData({ ...formData, maxWeeklyHours: parseInt(e.target.value) })
-                    }
+                    type="email"
+                    value={formData.email || ''}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     className="w-full bg-surface border border-border rounded-xl px-3.5 py-2 text-sm text-foreground focus:ring-2 focus:ring-accent"
                   />
                 </div>
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-foreground uppercase mb-1">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  value={formData.email || ''}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full bg-surface border border-border rounded-xl px-3.5 py-2 text-sm text-foreground focus:ring-2 focus:ring-accent"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-foreground uppercase mb-2">
-                  Assigned Subjects Taught (Multi-select)
-                </label>
-                <div className="space-y-1.5 max-h-48 overflow-y-auto p-2 border border-border rounded-xl bg-surface-subtle">
-                  {subjects.map((s) => {
-                    const isChecked = (formData.subjectIds || []).includes(s.id);
-                    return (
-                      <label
-                        key={s.id}
-                        className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-surface text-xs font-medium cursor-pointer"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={(e) => {
-                            const current = formData.subjectIds || [];
-                            const updated = e.target.checked
-                              ? [...current, s.id]
-                              : current.filter((id: string) => id !== s.id);
-                            setFormData({ ...formData, subjectIds: updated });
-                          }}
-                          className="rounded text-primary focus:ring-accent"
-                        />
-                        <span className="font-mono font-bold text-foreground">{s.code}</span>
-                        <span className="truncate text-muted-foreground">{s.name}</span>
-                      </label>
-                    );
-                  })}
+                <div>
+                  <label className="block text-xs font-bold text-foreground uppercase mb-2">
+                    Assigned Subjects Taught (Multi-select)
+                  </label>
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto p-2 border border-border rounded-xl bg-surface-subtle">
+                    {subjects.map((s) => {
+                      const isChecked = (formData.subjectIds || []).includes(s.id);
+                      return (
+                        <label
+                          key={s.id}
+                          className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-surface text-xs font-medium cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              const current = formData.subjectIds || [];
+                              const updated = e.target.checked
+                                ? [...current, s.id]
+                                : current.filter((id: string) => id !== s.id);
+                              setFormData({ ...formData, subjectIds: updated });
+                            }}
+                            className="rounded text-primary focus:ring-accent"
+                          />
+                          <span className="font-mono font-bold text-foreground">{s.abbreviation || s.code}</span>
+                          <span className="truncate text-muted-foreground">{s.name}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            </>
-          )}
+              </>
+            );
+          })()}
 
           {/* Subject Form */}
           {activeTab === 'subjects' && (
@@ -1061,22 +1211,19 @@ export function DataManagementStudio() {
                     className="w-full bg-surface border border-border rounded-xl px-3.5 py-2 text-sm font-mono text-foreground focus:ring-2 focus:ring-accent"
                   />
                 </div>
-                <div className="col-span-2">
+                <div className="col-span-1">
                   <label className="block text-xs font-bold text-foreground uppercase mb-1">
-                    Subject Name *
+                    Abbreviation
                   </label>
                   <input
                     type="text"
-                    required
-                    placeholder="e.g. Deep Learning & Neural Nets"
-                    value={formData.name || ''}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full bg-surface border border-border rounded-xl px-3.5 py-2 text-sm text-foreground focus:ring-2 focus:ring-accent"
+                    placeholder="e.g. DL, NLP"
+                    value={formData.abbreviation || ''}
+                    onChange={(e) => setFormData({ ...formData, abbreviation: e.target.value.toUpperCase() })}
+                    className="w-full bg-surface border border-border rounded-xl px-3.5 py-2 text-sm font-mono uppercase text-foreground focus:ring-2 focus:ring-accent"
                   />
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
+                <div className="col-span-1">
                   <label className="block text-xs font-bold text-foreground uppercase mb-1">
                     Type
                   </label>
@@ -1089,6 +1236,21 @@ export function DataManagementStudio() {
                     <option value="lab">2-Hour Lab</option>
                   </select>
                 </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-foreground uppercase mb-1">
+                  Subject Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Deep Learning & Neural Nets"
+                  value={formData.name || ''}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full bg-surface border border-border rounded-xl px-3.5 py-2 text-sm text-foreground focus:ring-2 focus:ring-accent"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-foreground uppercase mb-1">
                     Semester
@@ -1101,6 +1263,17 @@ export function DataManagementStudio() {
                     onChange={(e) =>
                       setFormData({ ...formData, semester: parseInt(e.target.value) })
                     }
+                    className="w-full bg-surface border border-border rounded-xl px-3.5 py-2 text-sm text-foreground focus:ring-2 focus:ring-accent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-foreground uppercase mb-1">
+                    Department
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.department ?? ''}
+                    onChange={(e) => setFormData({ ...formData, department: e.target.value })}
                     className="w-full bg-surface border border-border rounded-xl px-3.5 py-2 text-sm text-foreground focus:ring-2 focus:ring-accent"
                   />
                 </div>
