@@ -6,10 +6,10 @@
 // ================================================================
 
 const SEED_CLASSES = [
-  { id: 'class_aids_7a', name: 'AIDS 7th Sem A', department: 'Artificial Intelligence & Data Science', semester: 7, section: 'A', studentCount: 64 },
-  { id: 'class_aids_7b', name: 'AIDS 7th Sem B', department: 'Artificial Intelligence & Data Science', semester: 7, section: 'B', studentCount: 62 },
-  { id: 'class_aids_5a', name: 'AIDS 5th Sem A', department: 'Artificial Intelligence & Data Science', semester: 5, section: 'A', studentCount: 68 },
-  { id: 'class_aids_3a', name: 'AIDS 3rd Sem A', department: 'Artificial Intelligence & Data Science', semester: 3, section: 'A', studentCount: 70 },
+  { id: 'class_aids_7a', name: 'AIDS 7th Sem A', department: 'Artificial Intelligence & Data Science', semester: 7, section: 'A', studentCount: 64, classTeacherId: 'fac_ananya_sen' },
+  { id: 'class_aids_7b', name: 'AIDS 7th Sem B', department: 'Artificial Intelligence & Data Science', semester: 7, section: 'B', studentCount: 62, classTeacherId: 'fac_vikram_patel' },
+  { id: 'class_aids_5a', name: 'AIDS 5th Sem A', department: 'Artificial Intelligence & Data Science', semester: 5, section: 'A', studentCount: 68, classTeacherId: 'fac_priya_nair' },
+  { id: 'class_aids_3a', name: 'AIDS 3rd Sem A', department: 'Artificial Intelligence & Data Science', semester: 3, section: 'A', studentCount: 70, classTeacherId: 'fac_kiran_khadare' },
 ];
 
 const SEED_LABS = [
@@ -28,25 +28,25 @@ const SEED_ROOMS = [
 ];
 
 const SEED_SUBJECTS = [
-  { id: 'subj_cs701', name: 'Deep Learning & Neural Nets',    code: 'CS701', type: 'lecture', color: '#5755FE', department: 'AIDS', semester: 7 },
-  { id: 'subj_cs702', name: 'Deep Learning Lab',              code: 'CS702', type: 'lab',     color: '#FF71CD', department: 'AIDS', semester: 7 },
-  { id: 'subj_cs703', name: 'Natural Language Processing',    code: 'CS703', type: 'lecture', color: '#8B93FF', department: 'AIDS', semester: 7 },
-  { id: 'subj_cs704', name: 'Optimum Theory',                 code: 'CS704', type: 'lecture', color: '#0284C7', department: 'AIDS', semester: 7 },
-  { id: 'subj_cs501', name: 'Distributed Systems & Cloud',    code: 'CS501', type: 'lecture', color: '#0284C7', department: 'AIDS', semester: 5 },
-  { id: 'subj_cs502', name: 'Cloud Computing Lab',            code: 'CS502', type: 'lab',     color: '#FF71CD', department: 'AIDS', semester: 5 },
-  { id: 'subj_cs503', name: 'Machine Learning Principles',    code: 'CS503', type: 'lecture', color: '#10B981', department: 'AIDS', semester: 5 },
-  { id: 'subj_cs301', name: 'Data Structures & Algorithms',   code: 'CS301', type: 'lecture', color: '#D97706', department: 'AIDS', semester: 3 },
-  { id: 'subj_cs302', name: 'Data Structures Lab',            code: 'CS302', type: 'lab',     color: '#FF71CD', department: 'AIDS', semester: 3 },
+  { id: 'subj_cs701', name: 'Deep Learning & Neural Nets',    code: 'CS701', abbreviation: 'DL',      type: 'lecture', color: '#5755FE', department: 'AIDS', semester: 7 },
+  { id: 'subj_cs702', name: 'Deep Learning Lab',              code: 'CS702', abbreviation: 'DL-Lab',  type: 'lab',     color: '#FF71CD', department: 'AIDS', semester: 7 },
+  { id: 'subj_cs703', name: 'Natural Language Processing',    code: 'CS703', abbreviation: 'NLP',     type: 'lecture', color: '#8B93FF', department: 'AIDS', semester: 7 },
+  { id: 'subj_cs704', name: 'Optimum Theory',                 code: 'CS704', abbreviation: 'OT',      type: 'lecture', color: '#0284C7', department: 'AIDS', semester: 7 },
+  { id: 'subj_cs501', name: 'Distributed Systems & Cloud',    code: 'CS501', abbreviation: 'DSC',     type: 'lecture', color: '#0284C7', department: 'AIDS', semester: 5 },
+  { id: 'subj_cs502', name: 'Cloud Computing Lab',            code: 'CS502', abbreviation: 'CC-Lab',  type: 'lab',     color: '#FF71CD', department: 'AIDS', semester: 5 },
+  { id: 'subj_cs503', name: 'Machine Learning Principles',    code: 'CS503', abbreviation: 'MLP',     type: 'lecture', color: '#10B981', department: 'AIDS', semester: 5 },
+  { id: 'subj_cs301', name: 'Data Structures & Algorithms',   code: 'CS301', abbreviation: 'DSA',     type: 'lecture', color: '#D97706', department: 'AIDS', semester: 3 },
+  { id: 'subj_cs302', name: 'Data Structures Lab',            code: 'CS302', abbreviation: 'DSA-Lab', type: 'lab',     color: '#FF71CD', department: 'AIDS', semester: 3 },
 ];
 
 const SEED_FACULTY = [
-  { id: 'fac_kiran_khadare',   name: 'Prof. Kiran Khadare',   nickname: 'KK', department: 'Artificial Intelligence & Data Science', designation: 'Assistant Professor',         email: 'kiran.khadare@mits.edu',   maxWeeklyHours: 20, subjectIds: ['subj_cs704', 'subj_cs501', 'subj_cs301'] },
-  { id: 'fac_sarah_vance',     name: 'Dr. Sarah Vance',       nickname: 'SV', department: 'Artificial Intelligence & Data Science', designation: 'Professor & Dean',             email: 'sarah.vance@mits.edu',     maxWeeklyHours: 20, subjectIds: ['subj_cs701', 'subj_cs703'] },
-  { id: 'fac_rajesh_raman',    name: 'Dr. Rajesh Raman',      nickname: 'RR', department: 'Artificial Intelligence & Data Science', designation: 'Associate Professor & HOD',   email: 'rajesh.raman@mits.edu',    maxWeeklyHours: 20, subjectIds: ['subj_cs501', 'subj_cs503'] },
-  { id: 'fac_ananya_sen',      name: 'Prof. Ananya Sen',      nickname: 'AS', department: 'Artificial Intelligence & Data Science', designation: 'Assistant Professor',         email: 'ananya.sen@mits.edu',      maxWeeklyHours: 20, subjectIds: ['subj_cs301', 'subj_cs501', 'subj_cs502'] },
-  { id: 'fac_vikram_patel',    name: 'Prof. Vikram Patel',    nickname: 'VP', department: 'Artificial Intelligence & Data Science', designation: 'Assistant Professor',         email: 'vikram.patel@mits.edu',    maxWeeklyHours: 20, subjectIds: ['subj_cs702', 'subj_cs703'] },
-  { id: 'fac_priya_nair',      name: 'Dr. Priya Nair',        nickname: 'PN', department: 'Artificial Intelligence & Data Science', designation: 'Associate Professor',         email: 'priya.nair@mits.edu',      maxWeeklyHours: 20, subjectIds: ['subj_cs503', 'subj_cs301', 'subj_cs302'] },
-  { id: 'fac_rohan_deshmukh',  name: 'Prof. Rohan Deshmukh',  nickname: 'RD', department: 'Artificial Intelligence & Data Science', designation: 'Assistant Professor',         email: 'rohan.deshmukh@mits.edu',  maxWeeklyHours: 20, subjectIds: ['subj_cs702', 'subj_cs502', 'subj_cs302'] },
+  { id: 'fac_kiran_khadare',   name: 'Prof. Kiran Khadare',   nickname: 'KK', department: 'Artificial Intelligence & Data Science', designation: 'Assistant Professor', roles: ['Timetable Incharge'], email: 'kiran.khadare@mits.edu',   maxWeeklyHours: 20, subjectIds: ['subj_cs704', 'subj_cs501', 'subj_cs301'] },
+  { id: 'fac_sarah_vance',     name: 'Dr. Sarah Vance',       nickname: 'SV', department: 'Artificial Intelligence & Data Science', designation: 'Professor & Dean',   roles: [],                     email: 'sarah.vance@mits.edu',     maxWeeklyHours: 20, subjectIds: ['subj_cs701', 'subj_cs703'] },
+  { id: 'fac_rajesh_raman',    name: 'Dr. Rajesh Raman',      nickname: 'RR', department: 'Artificial Intelligence & Data Science', designation: 'Associate Professor', roles: ['Head of Department (HOD)'], email: 'rajesh.raman@mits.edu', maxWeeklyHours: 20, subjectIds: ['subj_cs501', 'subj_cs503'] },
+  { id: 'fac_ananya_sen',      name: 'Prof. Ananya Sen',      nickname: 'AS', department: 'Artificial Intelligence & Data Science', designation: 'Assistant Professor', roles: ['Timetable Incharge'], email: 'ananya.sen@mits.edu',      maxWeeklyHours: 20, subjectIds: ['subj_cs301', 'subj_cs501', 'subj_cs502'] },
+  { id: 'fac_vikram_patel',    name: 'Prof. Vikram Patel',    nickname: 'VP', department: 'Artificial Intelligence & Data Science', designation: 'Assistant Professor', roles: [],                     email: 'vikram.patel@mits.edu',    maxWeeklyHours: 20, subjectIds: ['subj_cs702', 'subj_cs703'] },
+  { id: 'fac_priya_nair',      name: 'Dr. Priya Nair',        nickname: 'PN', department: 'Artificial Intelligence & Data Science', designation: 'Associate Professor', roles: [],                     email: 'priya.nair@mits.edu',      maxWeeklyHours: 20, subjectIds: ['subj_cs503', 'subj_cs301', 'subj_cs302'] },
+  { id: 'fac_rohan_deshmukh',  name: 'Prof. Rohan Deshmukh',  nickname: 'RD', department: 'Artificial Intelligence & Data Science', designation: 'Assistant Professor', roles: ['Timetable Incharge'], email: 'rohan.deshmukh@mits.edu',  maxWeeklyHours: 20, subjectIds: ['subj_cs702', 'subj_cs502', 'subj_cs302'] },
 ];
 
 const SEED_ASSIGNMENTS = [

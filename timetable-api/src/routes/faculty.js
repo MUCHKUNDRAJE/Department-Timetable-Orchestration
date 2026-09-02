@@ -10,12 +10,20 @@ const router = express.Router();
 
 // ─── Helper: row + subject ids → camelCase ─────────────────────────
 function toFaculty(row, subjectIds = []) {
+  let roles = [];
+  if (Array.isArray(row.roles)) {
+    roles = row.roles;
+  } else if (typeof row.roles === 'string') {
+    try { roles = JSON.parse(row.roles); } catch (_) { roles = []; }
+  }
+
   return {
     id:              row.id,
     name:            row.name,
     nickname:        row.nickname,
     department:      row.department,
     designation:     row.designation,
+    roles,
     email:           row.email,
     maxWeeklyHours:  row.max_weekly_hours,
     subjectIds,
@@ -30,6 +38,7 @@ const facultyValidators = [
   body('email').isEmail().withMessage('valid email is required'),
   body('maxWeeklyHours').optional().isInt({ min: 1, max: 40 }).withMessage('maxWeeklyHours must be 1-40'),
   body('subjectIds').optional().isArray().withMessage('subjectIds must be an array'),
+  body('roles').optional().isArray().withMessage('roles must be an array'),
   body('nickname').optional().trim(),
 ];
 
@@ -59,13 +68,41 @@ router.post('/', facultyValidators, validate, async (req, res, next) => {
   try {
     await client.query('BEGIN');
 
-    const { name, nickname, department, designation, email, maxWeeklyHours = 20, subjectIds = [] } = req.body;
+    const { name, nickname, department, designation, roles = [], email, maxWeeklyHours = 20, subjectIds = [] } = req.body;
     const id = req.body.id || `fac_${uuidv4().replace(/-/g, '').slice(0, 12)}`;
+    const validRoles = Array.isArray(roles) ? roles : [];
+
+    // Designation validation: HOD (max 1) and Timetable Incharge (max 5)
+    if (validRoles.includes('Head of Department (HOD)')) {
+      const hodCheck = await client.query(
+        `SELECT COUNT(*) FROM faculty WHERE roles @> '["Head of Department (HOD)"]'::jsonb`
+      );
+      if (parseInt(hodCheck.rows[0].count) >= 1) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          success: false,
+          error: 'Only one faculty member can hold the Head of Department (HOD) designation at any given time.',
+        });
+      }
+    }
+
+    if (validRoles.includes('Timetable Incharge')) {
+      const inchargeCheck = await client.query(
+        `SELECT COUNT(*) FROM faculty WHERE roles @> '["Timetable Incharge"]'::jsonb`
+      );
+      if (parseInt(inchargeCheck.rows[0].count) >= 5) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          success: false,
+          error: 'Maximum limit of 5 faculty members can hold the Timetable Incharge designation at a time.',
+        });
+      }
+    }
 
     const facResult = await client.query(
-      `INSERT INTO faculty (id, name, nickname, department, designation, email, max_weekly_hours)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [id, name.trim(), nickname?.trim() || null, department.trim(), designation.trim(), email.trim(), maxWeeklyHours]
+      `INSERT INTO faculty (id, name, nickname, department, designation, roles, email, max_weekly_hours)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [id, name.trim(), nickname?.trim() || null, department.trim(), designation.trim(), JSON.stringify(validRoles), email.trim(), maxWeeklyHours]
     );
 
     // Insert faculty_subjects join rows
@@ -93,13 +130,43 @@ router.put('/:id', facultyValidators, validate, async (req, res, next) => {
   try {
     await client.query('BEGIN');
 
-    const { name, nickname, department, designation, email, maxWeeklyHours = 20, subjectIds = [] } = req.body;
+    const { name, nickname, department, designation, roles = [], email, maxWeeklyHours = 20, subjectIds = [] } = req.body;
+    const validRoles = Array.isArray(roles) ? roles : [];
+
+    // Designation validation: HOD (max 1) and Timetable Incharge (max 5)
+    if (validRoles.includes('Head of Department (HOD)')) {
+      const hodCheck = await client.query(
+        `SELECT COUNT(*) FROM faculty WHERE id != $1 AND roles @> '["Head of Department (HOD)"]'::jsonb`,
+        [req.params.id]
+      );
+      if (parseInt(hodCheck.rows[0].count) >= 1) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          success: false,
+          error: 'Only one faculty member can hold the Head of Department (HOD) designation at any given time.',
+        });
+      }
+    }
+
+    if (validRoles.includes('Timetable Incharge')) {
+      const inchargeCheck = await client.query(
+        `SELECT COUNT(*) FROM faculty WHERE id != $1 AND roles @> '["Timetable Incharge"]'::jsonb`,
+        [req.params.id]
+      );
+      if (parseInt(inchargeCheck.rows[0].count) >= 5) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          success: false,
+          error: 'Maximum limit of 5 faculty members can hold the Timetable Incharge designation at a time.',
+        });
+      }
+    }
 
     const facResult = await client.query(
       `UPDATE faculty
-       SET name=$2, nickname=$3, department=$4, designation=$5, email=$6, max_weekly_hours=$7, updated_at=NOW()
+       SET name=$2, nickname=$3, department=$4, designation=$5, roles=$6, email=$7, max_weekly_hours=$8, updated_at=NOW()
        WHERE id=$1 RETURNING *`,
-      [req.params.id, name.trim(), nickname?.trim() || null, department.trim(), designation.trim(), email.trim(), maxWeeklyHours]
+      [req.params.id, name.trim(), nickname?.trim() || null, department.trim(), designation.trim(), JSON.stringify(validRoles), email.trim(), maxWeeklyHours]
     );
     if (facResult.rowCount === 0) {
       await client.query('ROLLBACK');

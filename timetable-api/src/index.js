@@ -105,8 +105,11 @@ const server = app.listen(PORT, async () => {
       ALTER TABLE assignments ADD COLUMN IF NOT EXISTS is_recess BOOLEAN DEFAULT false;
       ALTER TABLE assignments ALTER COLUMN faculty_id DROP NOT NULL;
       ALTER TABLE assignments ALTER COLUMN subject_id DROP NOT NULL;
+      ALTER TABLE classes ADD COLUMN IF NOT EXISTS class_teacher_id TEXT REFERENCES faculty(id) ON DELETE SET NULL;
+      ALTER TABLE subjects ADD COLUMN IF NOT EXISTS abbreviation TEXT;
+      ALTER TABLE faculty ADD COLUMN IF NOT EXISTS roles JSONB DEFAULT '[]'::JSONB;
     `);
-    console.log('[DB] Verified database schema for is_recess and nullable faculty/subject.');
+    console.log('[DB] Verified database schema for is_recess, class_teacher_id, abbreviation, and faculty roles.');
   } catch (err) {
     console.warn('[DB] Schema check notice:', err.message);
   }

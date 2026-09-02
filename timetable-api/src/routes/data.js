@@ -11,11 +11,18 @@ const {
 const router = express.Router();
 
 // ─── Helper: row mappers ─────────────────────────────────────────────
-function toClass(r)      { return { id: r.id, name: r.name, department: r.department, semester: r.semester, section: r.section, studentCount: r.student_count }; }
+function toClass(r)      { return { id: r.id, name: r.name, department: r.department, semester: r.semester, section: r.section, studentCount: r.student_count, classTeacherId: r.class_teacher_id || undefined }; }
 function toLab(r)        { return { id: r.id, name: r.name, capacity: r.capacity, department: r.department, location: r.location }; }
 function toRoom(r)       { return { id: r.id, name: r.name, capacity: r.capacity, building: r.building, type: r.type }; }
-function toSubject(r)    { return { id: r.id, name: r.name, code: r.code, type: r.type, color: r.color, department: r.department, semester: r.semester }; }
-function toFaculty(r, subjectIds = []) { return { id: r.id, name: r.name, nickname: r.nickname, department: r.department, designation: r.designation, email: r.email, maxWeeklyHours: r.max_weekly_hours, subjectIds }; }
+function toSubject(r)    { return { id: r.id, name: r.name, code: r.code, abbreviation: r.abbreviation || undefined, type: r.type, color: r.color, department: r.department, semester: r.semester }; }
+function toFaculty(r, subjectIds = []) {
+  let roles = [];
+  if (Array.isArray(r.roles)) roles = r.roles;
+  else if (typeof r.roles === 'string') {
+    try { roles = JSON.parse(r.roles); } catch (_) { roles = []; }
+  }
+  return { id: r.id, name: r.name, nickname: r.nickname, department: r.department, designation: r.designation, roles, email: r.email, maxWeeklyHours: r.max_weekly_hours, subjectIds };
+}
 function toAssignment(r) { return { id: r.id, day: r.day, startSlot: r.start_slot, duration: r.duration, targetType: r.target_type, targetId: r.target_id, classId: r.class_id, facultyId: r.faculty_id || '', subjectId: r.subject_id || '', roomId: r.room_id, labId: r.lab_id, labBatches: r.lab_batches || [], isRecess: Boolean(r.is_recess) }; }
 
 // ─── GET /api/data/export ────────────────────────────────────────────
@@ -62,12 +69,28 @@ router.post('/import', async (req, res, next) => {
     // Truncate in dependency order
     await client.query('TRUNCATE assignments, faculty_subjects, faculty, subjects, rooms, labs, classes CASCADE');
 
+    // Insert faculty first (so classes can reference faculty.id via class_teacher_id)
+    for (const f of faculty) {
+      const validRoles = Array.isArray(f.roles) ? f.roles : [];
+      await client.query(
+        `INSERT INTO faculty (id, name, nickname, department, designation, roles, email, max_weekly_hours)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (id) DO NOTHING`,
+        [f.id, f.name, f.nickname ?? null, f.department, f.designation, JSON.stringify(validRoles), f.email, f.maxWeeklyHours ?? 20]
+      );
+      for (const subjId of (f.subjectIds || [])) {
+        await client.query(
+          'INSERT INTO faculty_subjects (faculty_id, subject_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',
+          [f.id, subjId]
+        );
+      }
+    }
+
     // Insert classes
     for (const c of classes) {
       await client.query(
-        `INSERT INTO classes (id, name, department, semester, section, student_count)
-         VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (id) DO NOTHING`,
-        [c.id, c.name, c.department, c.semester, c.section, c.studentCount ?? 60]
+        `INSERT INTO classes (id, name, department, semester, section, student_count, class_teacher_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (id) DO NOTHING`,
+        [c.id, c.name, c.department, c.semester, c.section, c.studentCount ?? 60, c.classTeacherId || null]
       );
     }
     // Insert labs
@@ -89,24 +112,10 @@ router.post('/import', async (req, res, next) => {
     // Insert subjects
     for (const s of subjects) {
       await client.query(
-        `INSERT INTO subjects (id, name, code, type, color, department, semester)
-         VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (id) DO NOTHING`,
-        [s.id, s.name, s.code, s.type, s.color, s.department, s.semester]
+        `INSERT INTO subjects (id, name, code, abbreviation, type, color, department, semester)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (id) DO NOTHING`,
+        [s.id, s.name, s.code, s.abbreviation ?? null, s.type, s.color, s.department, s.semester]
       );
-    }
-    // Insert faculty + faculty_subjects
-    for (const f of faculty) {
-      await client.query(
-        `INSERT INTO faculty (id, name, nickname, department, designation, email, max_weekly_hours)
-         VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (id) DO NOTHING`,
-        [f.id, f.name, f.nickname ?? null, f.department, f.designation, f.email, f.maxWeeklyHours ?? 20]
-      );
-      for (const subjId of (f.subjectIds || [])) {
-        await client.query(
-          'INSERT INTO faculty_subjects (faculty_id, subject_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',
-          [f.id, subjId]
-        );
-      }
     }
     // Insert assignments
     for (const a of assignments) {
