@@ -638,10 +638,10 @@ async function buildClassWorksheet(workbook: ExcelJS.Workbook, params: BuildShee
     if (isLab) {
       const batchAssign = classAssignments.find((a) => a.labBatches && a.labBatches.some((b) => b.subjectId === s.id));
       if (batchAssign && batchAssign.labBatches) {
-        const a1 = batchAssign.labBatches.find((b) => (b.id === b1.name || b.id === 'A1' || b.id === 'B1') && b.subjectId === s.id);
-        const a2 = batchAssign.labBatches.find((b) => (b.id === b2.name || b.id === 'A2' || b.id === 'B2') && b.subjectId === s.id);
-        const a3 = batchAssign.labBatches.find((b) => (b.id === b3.name || b.id === 'A3' || b.id === 'B3') && b.subjectId === s.id);
-        const a4 = batchAssign.labBatches.find((b) => (b.id === b4.name || b.id === 'A4' || b.id === 'B4') && b.subjectId === s.id);
+        const a1 = batchAssign.labBatches.find((b) => ((b.id as string) === b1.name || (b.id as string) === 'A1' || (b.id as string) === 'B1') && b.subjectId === s.id);
+        const a2 = batchAssign.labBatches.find((b) => ((b.id as string) === b2.name || (b.id as string) === 'A2' || (b.id as string) === 'B2') && b.subjectId === s.id);
+        const a3 = batchAssign.labBatches.find((b) => ((b.id as string) === b3.name || (b.id as string) === 'A3' || (b.id as string) === 'B3') && b.subjectId === s.id);
+        const a4 = batchAssign.labBatches.find((b) => ((b.id as string) === b4.name || (b.id as string) === 'A4' || (b.id as string) === 'B4') && b.subjectId === s.id);
 
         if (a1) b1Fac = facultyList.find((f) => f.id === a1.facultyId)?.name || '—';
         if (a2) b2Fac = facultyList.find((f) => f.id === a2.facultyId)?.name || '—';
