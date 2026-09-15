@@ -11,10 +11,17 @@ const {
 const router = express.Router();
 
 // ─── Helper: row mappers ─────────────────────────────────────────────
-function toClass(r)      { return { id: r.id, name: r.name, department: r.department, semester: r.semester, section: r.section, studentCount: r.student_count, classTeacherId: r.class_teacher_id || undefined }; }
+function toClass(r)      {
+  let batches = [];
+  if (Array.isArray(r.batches)) {
+    batches = r.batches;
+  } else if (typeof r.batches === 'string') {
+    try { batches = JSON.parse(r.batches); } catch (_) { batches = []; }
+  }
+  return { id: r.id, name: r.name, department: r.department, semester: r.semester, section: r.section, studentCount: r.student_count, classTeacherId: r.class_teacher_id || undefined, batches };
+}
 function toLab(r)        { return { id: r.id, name: r.name, capacity: r.capacity, department: r.department, location: r.location }; }
-function toRoom(r)       { return { id: r.id, name: r.name, capacity: r.capacity, building: r.building, type: r.type }; }
-function toSubject(r)    { return { id: r.id, name: r.name, code: r.code, abbreviation: r.abbreviation || undefined, type: r.type, color: r.color, department: r.department, semester: r.semester }; }
+function toSubject(r)    { return { id: r.id, name: r.name, code: r.code, abbreviation: r.abbreviation || undefined, type: r.type, credits: r.credits !== null && r.credits !== undefined ? Number(r.credits) : 3, color: r.color, department: r.department, semester: r.semester }; }
 function toFaculty(r, subjectIds = []) {
   let roles = [];
   if (Array.isArray(r.roles)) roles = r.roles;
@@ -88,9 +95,9 @@ router.post('/import', async (req, res, next) => {
     // Insert classes
     for (const c of classes) {
       await client.query(
-        `INSERT INTO classes (id, name, department, semester, section, student_count, class_teacher_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (id) DO NOTHING`,
-        [c.id, c.name, c.department, c.semester, c.section, c.studentCount ?? 60, c.classTeacherId || null]
+        `INSERT INTO classes (id, name, department, semester, section, student_count, class_teacher_id, batches)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (id) DO NOTHING`,
+        [c.id, c.name, c.department, c.semester, c.section, c.studentCount ?? 60, c.classTeacherId || null, JSON.stringify(c.batches || [])]
       );
     }
     // Insert labs
@@ -111,10 +118,11 @@ router.post('/import', async (req, res, next) => {
     }
     // Insert subjects
     for (const s of subjects) {
+      const parsedCredits = s.credits !== undefined && s.credits !== null ? Math.min(4, Math.max(1, parseInt(s.credits, 10) || 3)) : 3;
       await client.query(
-        `INSERT INTO subjects (id, name, code, abbreviation, type, color, department, semester)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (id) DO NOTHING`,
-        [s.id, s.name, s.code, s.abbreviation ?? null, s.type, s.color, s.department, s.semester]
+        `INSERT INTO subjects (id, name, code, abbreviation, type, credits, color, department, semester)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (id) DO NOTHING`,
+        [s.id, s.name, s.code, s.abbreviation ?? null, s.type, parsedCredits, s.color, s.department, s.semester]
       );
     }
     // Insert assignments

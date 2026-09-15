@@ -6,10 +6,66 @@
 // ================================================================
 
 const SEED_CLASSES = [
-  { id: 'class_aids_7a', name: 'AIDS 7th Sem A', department: 'Artificial Intelligence & Data Science', semester: 7, section: 'A', studentCount: 64, classTeacherId: 'fac_ananya_sen' },
-  { id: 'class_aids_7b', name: 'AIDS 7th Sem B', department: 'Artificial Intelligence & Data Science', semester: 7, section: 'B', studentCount: 62, classTeacherId: 'fac_vikram_patel' },
-  { id: 'class_aids_5a', name: 'AIDS 5th Sem A', department: 'Artificial Intelligence & Data Science', semester: 5, section: 'A', studentCount: 68, classTeacherId: 'fac_priya_nair' },
-  { id: 'class_aids_3a', name: 'AIDS 3rd Sem A', department: 'Artificial Intelligence & Data Science', semester: 3, section: 'A', studentCount: 70, classTeacherId: 'fac_kiran_khadare' },
+  {
+    id: 'class_aids_7a',
+    name: 'AIDS 7th Sem A',
+    department: 'Artificial Intelligence & Data Science',
+    semester: 7,
+    section: 'A',
+    studentCount: 64,
+    classTeacherId: 'fac_ananya_sen',
+    batches: [
+      { name: 'A1', fromRollNo: 1, toRollNo: 16 },
+      { name: 'A2', fromRollNo: 17, toRollNo: 32 },
+      { name: 'A3', fromRollNo: 33, toRollNo: 48 },
+      { name: 'A4', fromRollNo: 49, toRollNo: 64 },
+    ],
+  },
+  {
+    id: 'class_aids_7b',
+    name: 'AIDS 7th Sem B',
+    department: 'Artificial Intelligence & Data Science',
+    semester: 7,
+    section: 'B',
+    studentCount: 62,
+    classTeacherId: 'fac_vikram_patel',
+    batches: [
+      { name: 'B1', fromRollNo: 1, toRollNo: 16 },
+      { name: 'B2', fromRollNo: 17, toRollNo: 31 },
+      { name: 'B3', fromRollNo: 32, toRollNo: 47 },
+      { name: 'B4', fromRollNo: 48, toRollNo: 62 },
+    ],
+  },
+  {
+    id: 'class_aids_5a',
+    name: 'AIDS 5th Sem A',
+    department: 'Artificial Intelligence & Data Science',
+    semester: 5,
+    section: 'A',
+    studentCount: 68,
+    classTeacherId: 'fac_priya_nair',
+    batches: [
+      { name: 'A1', fromRollNo: 1, toRollNo: 17 },
+      { name: 'A2', fromRollNo: 18, toRollNo: 34 },
+      { name: 'A3', fromRollNo: 35, toRollNo: 51 },
+      { name: 'A4', fromRollNo: 52, toRollNo: 68 },
+    ],
+  },
+  {
+    id: 'class_aids_3a',
+    name: 'AIDS 3rd Sem A',
+    department: 'Artificial Intelligence & Data Science',
+    semester: 3,
+    section: 'A',
+    studentCount: 70,
+    classTeacherId: 'fac_kiran_khadare',
+    batches: [
+      { name: 'A1', fromRollNo: 1, toRollNo: 18 },
+      { name: 'A2', fromRollNo: 19, toRollNo: 36 },
+      { name: 'A3', fromRollNo: 37, toRollNo: 54 },
+      { name: 'A4', fromRollNo: 55, toRollNo: 70 },
+    ],
+  },
 ];
 
 const SEED_LABS = [
@@ -28,15 +84,15 @@ const SEED_ROOMS = [
 ];
 
 const SEED_SUBJECTS = [
-  { id: 'subj_cs701', name: 'Deep Learning & Neural Nets',    code: 'CS701', abbreviation: 'DL',      type: 'lecture', color: '#5755FE', department: 'AIDS', semester: 7 },
-  { id: 'subj_cs702', name: 'Deep Learning Lab',              code: 'CS702', abbreviation: 'DL-Lab',  type: 'lab',     color: '#FF71CD', department: 'AIDS', semester: 7 },
-  { id: 'subj_cs703', name: 'Natural Language Processing',    code: 'CS703', abbreviation: 'NLP',     type: 'lecture', color: '#8B93FF', department: 'AIDS', semester: 7 },
-  { id: 'subj_cs704', name: 'Optimum Theory',                 code: 'CS704', abbreviation: 'OT',      type: 'lecture', color: '#0284C7', department: 'AIDS', semester: 7 },
-  { id: 'subj_cs501', name: 'Distributed Systems & Cloud',    code: 'CS501', abbreviation: 'DSC',     type: 'lecture', color: '#0284C7', department: 'AIDS', semester: 5 },
-  { id: 'subj_cs502', name: 'Cloud Computing Lab',            code: 'CS502', abbreviation: 'CC-Lab',  type: 'lab',     color: '#FF71CD', department: 'AIDS', semester: 5 },
-  { id: 'subj_cs503', name: 'Machine Learning Principles',    code: 'CS503', abbreviation: 'MLP',     type: 'lecture', color: '#10B981', department: 'AIDS', semester: 5 },
-  { id: 'subj_cs301', name: 'Data Structures & Algorithms',   code: 'CS301', abbreviation: 'DSA',     type: 'lecture', color: '#D97706', department: 'AIDS', semester: 3 },
-  { id: 'subj_cs302', name: 'Data Structures Lab',            code: 'CS302', abbreviation: 'DSA-Lab', type: 'lab',     color: '#FF71CD', department: 'AIDS', semester: 3 },
+  { id: 'subj_cs701', name: 'Deep Learning & Neural Nets',    code: 'CS701', abbreviation: 'DL',      type: 'lecture', credits: 4, color: '#5755FE', department: 'AIDS', semester: 7 },
+  { id: 'subj_cs702', name: 'Deep Learning Lab',              code: 'CS702', abbreviation: 'DL-Lab',  type: 'lab',     credits: 2, color: '#FF71CD', department: 'AIDS', semester: 7 },
+  { id: 'subj_cs703', name: 'Natural Language Processing',    code: 'CS703', abbreviation: 'NLP',     type: 'lecture', credits: 4, color: '#8B93FF', department: 'AIDS', semester: 7 },
+  { id: 'subj_cs704', name: 'Optimum Theory',                 code: 'CS704', abbreviation: 'OT',      type: 'lecture', credits: 3, color: '#0284C7', department: 'AIDS', semester: 7 },
+  { id: 'subj_cs501', name: 'Distributed Systems & Cloud',    code: 'CS501', abbreviation: 'DSC',     type: 'lecture', credits: 4, color: '#0284C7', department: 'AIDS', semester: 5 },
+  { id: 'subj_cs502', name: 'Cloud Computing Lab',            code: 'CS502', abbreviation: 'CC-Lab',  type: 'lab',     credits: 2, color: '#FF71CD', department: 'AIDS', semester: 5 },
+  { id: 'subj_cs503', name: 'Machine Learning Principles',    code: 'CS503', abbreviation: 'MLP',     type: 'lecture', credits: 4, color: '#10B981', department: 'AIDS', semester: 5 },
+  { id: 'subj_cs301', name: 'Data Structures & Algorithms',   code: 'CS301', abbreviation: 'DSA',     type: 'lecture', credits: 4, color: '#D97706', department: 'AIDS', semester: 3 },
+  { id: 'subj_cs302', name: 'Data Structures Lab',            code: 'CS302', abbreviation: 'DSA-Lab', type: 'lab',     credits: 2, color: '#FF71CD', department: 'AIDS', semester: 3 },
 ];
 
 const SEED_FACULTY = [

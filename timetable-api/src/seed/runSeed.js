@@ -16,8 +16,8 @@ async function seed() {
     console.log('[Seed] Inserting classes...');
     for (const c of SEED_CLASSES) {
       await client.query(
-        `INSERT INTO classes (id, name, department, semester, section, student_count) VALUES ($1,$2,$3,$4,$5,$6)`,
-        [c.id, c.name, c.department, c.semester, c.section, c.studentCount]
+        `INSERT INTO classes (id, name, department, semester, section, student_count, class_teacher_id, batches) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [c.id, c.name, c.department, c.semester, c.section, c.studentCount, c.classTeacherId || null, JSON.stringify(c.batches || [])]
       );
     }
 
@@ -40,8 +40,8 @@ async function seed() {
     console.log('[Seed] Inserting subjects...');
     for (const s of SEED_SUBJECTS) {
       await client.query(
-        `INSERT INTO subjects (id, name, code, type, color, department, semester) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-        [s.id, s.name, s.code, s.type, s.color, s.department, s.semester]
+        `INSERT INTO subjects (id, name, code, abbreviation, type, credits, color, department, semester) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [s.id, s.name, s.code, s.abbreviation ?? null, s.type, s.credits || 3, s.color, s.department, s.semester]
       );
     }
 

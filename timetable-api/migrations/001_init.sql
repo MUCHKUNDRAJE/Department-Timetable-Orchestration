@@ -17,12 +17,14 @@ DROP TABLE IF EXISTS classes CASCADE;
 CREATE TABLE classes (
   id            TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
   name          TEXT NOT NULL,
-  department    TEXT NOT NULL,
-  semester      INTEGER NOT NULL CHECK (semester BETWEEN 1 AND 8),
-  section       TEXT NOT NULL,
-  student_count INTEGER DEFAULT 60,
-  created_at    TIMESTAMPTZ DEFAULT NOW(),
-  updated_at    TIMESTAMPTZ DEFAULT NOW()
+  department       TEXT NOT NULL,
+  semester         INTEGER NOT NULL CHECK (semester BETWEEN 1 AND 8),
+  section          TEXT NOT NULL,
+  student_count    INTEGER DEFAULT 60,
+  class_teacher_id TEXT,
+  batches          JSONB DEFAULT '[]'::JSONB,
+  created_at       TIMESTAMPTZ DEFAULT NOW(),
+  updated_at       TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ─────────────────────────── LABS ──────────────────────────────
@@ -49,15 +51,17 @@ CREATE TABLE rooms (
 
 -- ─────────────────────────── SUBJECTS ──────────────────────────
 CREATE TABLE subjects (
-  id         TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
-  name       TEXT NOT NULL,
-  code       TEXT NOT NULL UNIQUE,
-  type       TEXT CHECK (type IN ('lecture', 'lab')) NOT NULL DEFAULT 'lecture',
-  color      TEXT NOT NULL DEFAULT '#5755FE',
-  department TEXT NOT NULL,
-  semester   INTEGER NOT NULL CHECK (semester BETWEEN 1 AND 8),
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
+  id           TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+  name         TEXT NOT NULL,
+  code         TEXT NOT NULL UNIQUE,
+  abbreviation TEXT,
+  type         TEXT CHECK (type IN ('lecture', 'lab')) NOT NULL DEFAULT 'lecture',
+  credits      INTEGER NOT NULL DEFAULT 3 CHECK (credits BETWEEN 1 AND 4),
+  color        TEXT NOT NULL DEFAULT '#5755FE',
+  department   TEXT NOT NULL,
+  semester     INTEGER NOT NULL CHECK (semester BETWEEN 1 AND 8),
+  created_at   TIMESTAMPTZ DEFAULT NOW(),
+  updated_at   TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ─────────────────────────── FACULTY ───────────────────────────

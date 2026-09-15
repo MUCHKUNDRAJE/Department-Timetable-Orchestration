@@ -16,6 +16,7 @@ function toSubject(row) {
     code:         row.code,
     abbreviation: row.abbreviation || undefined,
     type:         row.type,
+    credits:      row.credits !== null && row.credits !== undefined ? Number(row.credits) : 3,
     color:        row.color,
     department:   row.department,
     semester:     row.semester,
@@ -28,6 +29,7 @@ const subjectValidators = [
   body('code').trim().notEmpty().withMessage('code is required'),
   body('abbreviation').optional({ nullable: true }).trim(),
   body('type').isIn(['lecture', 'lab']).withMessage('type must be lecture|lab'),
+  body('credits').optional({ nullable: true }).isInt({ min: 1, max: 4 }).withMessage('credits must be between 1 and 4'),
   body('color').trim().notEmpty().withMessage('color is required'),
   body('department').trim().notEmpty().withMessage('department is required'),
   body('semester').isInt({ min: 1, max: 8 }).withMessage('semester must be 1-8'),
@@ -44,12 +46,13 @@ router.get('/', async (req, res, next) => {
 // POST /api/subjects
 router.post('/', subjectValidators, validate, async (req, res, next) => {
   try {
-    const { name, code, abbreviation, type, color, department, semester } = req.body;
+    const { name, code, abbreviation, type, credits, color, department, semester } = req.body;
     const id = req.body.id || `subj_${uuidv4().replace(/-/g, '').slice(0, 10)}`;
+    const parsedCredits = credits !== undefined && credits !== null ? Math.min(4, Math.max(1, parseInt(credits, 10) || 3)) : 3;
     const result = await db.query(
-      `INSERT INTO subjects (id, name, code, abbreviation, type, color, department, semester)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-      [id, name.trim(), code.trim().toUpperCase(), abbreviation ? abbreviation.trim() : null, type, color.trim(), department.trim(), semester]
+      `INSERT INTO subjects (id, name, code, abbreviation, type, credits, color, department, semester)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      [id, name.trim(), code.trim().toUpperCase(), abbreviation ? abbreviation.trim() : null, type, parsedCredits, color.trim(), department.trim(), semester]
     );
     res.status(201).json({ success: true, data: toSubject(result.rows[0]) });
   } catch (err) { next(err); }
@@ -58,12 +61,13 @@ router.post('/', subjectValidators, validate, async (req, res, next) => {
 // PUT /api/subjects/:id
 router.put('/:id', subjectValidators, validate, async (req, res, next) => {
   try {
-    const { name, code, abbreviation, type, color, department, semester } = req.body;
+    const { name, code, abbreviation, type, credits, color, department, semester } = req.body;
+    const parsedCredits = credits !== undefined && credits !== null ? Math.min(4, Math.max(1, parseInt(credits, 10) || 3)) : 3;
     const result = await db.query(
       `UPDATE subjects
-       SET name=$2, code=$3, abbreviation=$4, type=$5, color=$6, department=$7, semester=$8, updated_at=NOW()
+       SET name=$2, code=$3, abbreviation=$4, type=$5, credits=$6, color=$7, department=$8, semester=$9, updated_at=NOW()
        WHERE id=$1 RETURNING *`,
-      [req.params.id, name.trim(), code.trim().toUpperCase(), abbreviation ? abbreviation.trim() : null, type, color.trim(), department.trim(), semester]
+      [req.params.id, name.trim(), code.trim().toUpperCase(), abbreviation ? abbreviation.trim() : null, type, parsedCredits, color.trim(), department.trim(), semester]
     );
     if (result.rowCount === 0) return res.status(404).json({ success: false, error: 'Subject not found.' });
     res.json({ success: true, data: toSubject(result.rows[0]) });
