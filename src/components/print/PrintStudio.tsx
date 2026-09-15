@@ -26,7 +26,7 @@ import {
 } from '@/components/ui/select';
 import { PrintPreviewSheet } from './PrintPreviewSheet';
 import { exportElementToPdf, exportMultipleElementsToPdf, printElementDirectly } from '@/lib/pdf-export';
-import { exportClassTimetableToExcel, exportAllClassesToExcel } from '@/lib/excel-export';
+import { exportClassTimetableToExcel, exportAllClassesToExcel, exportLabTimetableToExcel, exportAllLabsToExcel, exportRoomTimetableToExcel, exportAllRoomsToExcel, exportFacultyTimetableToExcel, exportAllFacultyToExcel } from '@/lib/excel-export';
 import { cn } from '@/lib/utils';
 
 export function PrintStudio() {
@@ -75,38 +75,47 @@ export function PrintStudio() {
     setIsExporting(false);
   };
 
-  // Single Excel (.xlsx) Export Handler
+  // Single Excel (.xlsx) Export Handler — mode-aware routing
   const handleExportSingleExcel = async () => {
     setIsExcelExporting(true);
-    const targetClass = activeMode === 'ug'
-      ? (currentEntity as CollegeClass)
-      : classes[0];
+    const academicSession = undefined; // pulled from store inside each builder
 
-    if (targetClass) {
-      await exportClassTimetableToExcel({
-        cls: targetClass,
-        classes,
-        facultyList: faculty,
-        subjects,
-        rooms,
-        labs,
-        assignments,
-      });
+    if (activeMode === 'ug') {
+      const targetClass = currentEntity as CollegeClass;
+      if (targetClass) {
+        await exportClassTimetableToExcel({ cls: targetClass, classes, facultyList: faculty, subjects, rooms, labs, assignments });
+      }
+    } else if (activeMode === 'lab') {
+      const targetLab = currentEntity as typeof labs[0];
+      if (targetLab) {
+        await exportLabTimetableToExcel({ lab: targetLab, classes, facultyList: faculty, subjects, rooms, labs, assignments });
+      }
+    } else if (activeMode === 'room') {
+      const targetRoom = currentEntity as typeof rooms[0];
+      if (targetRoom) {
+        await exportRoomTimetableToExcel({ room: targetRoom, classes, facultyList: faculty, subjects, rooms, labs, assignments });
+      }
+    } else if (activeMode === 'faculty') {
+      const targetFac = currentEntity as typeof faculty[0];
+      if (targetFac) {
+        await exportFacultyTimetableToExcel({ fac: targetFac, classes, facultyList: faculty, subjects, rooms, labs, assignments });
+      }
     }
     setIsExcelExporting(false);
   };
 
-  // Bulk Excel (.xlsx Multi-Sheet Workbook) Export Handler
+  // Bulk Excel (.xlsx Multi-Sheet Workbook) Export Handler — mode-aware routing
   const handleBulkExportExcel = async () => {
     setIsBulkExcelExporting(true);
-    await exportAllClassesToExcel(
-      classes,
-      faculty,
-      subjects,
-      rooms,
-      labs,
-      assignments
-    );
+    if (activeMode === 'ug') {
+      await exportAllClassesToExcel(classes, faculty, subjects, rooms, labs, assignments);
+    } else if (activeMode === 'lab') {
+      await exportAllLabsToExcel(labs, classes, faculty, subjects, rooms, assignments);
+    } else if (activeMode === 'room') {
+      await exportAllRoomsToExcel(rooms, classes, faculty, subjects, labs, assignments);
+    } else if (activeMode === 'faculty') {
+      await exportAllFacultyToExcel(faculty, classes, subjects, rooms, labs, assignments);
+    }
     setIsBulkExcelExporting(false);
   };
 

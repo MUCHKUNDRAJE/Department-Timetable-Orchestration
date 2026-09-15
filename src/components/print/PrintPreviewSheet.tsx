@@ -33,7 +33,10 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
       const cls = classes.find((c) => c.id === targetId) || classes[0];
       entityType = 'UNDERGRADUATE CLASS TIMETABLE';
       title = cls ? `${cls.name} (Semester ${cls.semester} - Section ${cls.section})` : 'Class Timetable';
-      subtitle = `Strength: ${cls?.studentCount || 60} Students | Academic Session: ${activeSession}`;
+      const batchStr = cls?.batches && cls.batches.length > 0
+        ? ` | Batches: ${cls.batches.map((b) => `${b.name} [${b.fromRollNo}-${b.toRollNo}]`).join(', ')}`
+        : '';
+      subtitle = `Strength: ${cls?.studentCount || 60} Students${batchStr}`;
     } else if (mode === 'lab') {
       const lab = labs.find((l) => l.id === targetId) || labs[0];
       entityType = 'LABORATORY UTILIZATION SCHEDULE';
@@ -124,6 +127,8 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
         ref={ref}
         className="bg-white text-slate-900 p-5 sm:p-6 rounded-xl border border-slate-300 shadow-md font-sans text-xs print:p-4 print:border-none print:shadow-none w-full max-w-[1200px] mx-auto box-border break-inside-avoid"
       >
+        {/* ── grid section: captured as Page 1 in 2-page PDF export ── */}
+        <div data-section="grid">
         {/* Official Institutional Header */}
         <div className="border-b-2 border-slate-900 pb-2.5 mb-3 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3.5 min-w-0">
@@ -384,9 +389,11 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
             </tbody>
           </table>
         </div>
+        </div>{/* end data-section="grid" */}
 
+        {/* ── labels section: captured as Page 2 in 2-page PDF export ── */}
         {/* Reference Sections & Dynamic Institutional Matrices */}
-        <div className="space-y-3 mb-3">
+        <div data-section="labels" className="space-y-3 mb-3">
           {/* Main 2-Column: Subject Matrix & Faculty Reference */}
           <div className="border-2 border-slate-900 rounded-lg overflow-hidden bg-slate-50/70">
             <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-300">
@@ -435,7 +442,7 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
                                 isLab ? 'bg-rose-100 text-rose-800 border border-rose-200' : 'bg-slate-200 text-slate-700'
                               )}
                             >
-                              {isLab ? 'Lab 2h' : 'Lecture'}
+                              {isLab ? 'Lab 2h' : 'Lecture'} · {s.credits ?? (isLab ? 2 : 3)}Cr
                             </span>
                           </td>
                           <td className="py-1 text-center font-mono font-bold text-indigo-900">
@@ -688,7 +695,7 @@ export const PrintPreviewSheet = forwardRef<HTMLDivElement, PrintPreviewSheetPro
               Yeshwantrao Chavan College of Engineering • Effective {INSTITUTION_INFO.effectiveDate}
             </div>
           </div>
-        </div>
+        </div>{/* end data-section="labels" */}
 
         {/* Watermark Footer */}
         {/*} <div className="pt-3 text-center text-[8.5px] text-slate-400 font-mono select-none border-t border-slate-200 mt-2">

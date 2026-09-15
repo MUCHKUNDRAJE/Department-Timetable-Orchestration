@@ -56,49 +56,125 @@ async function captureElement(element: HTMLElement): Promise<{ dataUrl: string; 
 }
 
 /**
+ * Captures a specific section (identified by data-section attribute) of an element.
+ * The clone is rendered at full sheet width so layout is stable, then only the
+ * target section node is captured as a PNG.
+ */
+async function captureElementSection(
+  element: HTMLElement,
+  sectionAttr: string
+): Promise<{ dataUrl: string; w: number; h: number }> {
+  const container = document.createElement('div');
+  container.style.cssText = [
+    'position:fixed',
+    'top:-99999px',
+    'left:-99999px',
+    `width:${CAPTURE_WIDTH}px`,
+    'background:#ffffff',
+    'z-index:-1',
+    'pointer-events:none',
+  ].join(';');
+
+  const clone = element.cloneNode(true) as HTMLElement;
+  clone.style.maxWidth = `${CAPTURE_WIDTH}px`;
+  clone.style.width = `${CAPTURE_WIDTH}px`;
+  clone.style.margin = '0';
+  clone.style.borderRadius = '0';
+  clone.style.border = 'none';
+  clone.style.boxShadow = 'none';
+  clone.style.padding = '16px';
+  container.appendChild(clone);
+  document.body.appendChild(container);
+
+  await new Promise((r) => setTimeout(r, 220));
+  if (typeof document !== 'undefined' && document.fonts) {
+    await document.fonts.ready;
+  }
+
+  // Find the labelled section inside the clone
+  const sectionEl = clone.querySelector(`[data-section="${sectionAttr}"]`) as HTMLElement | null;
+  const targetEl: HTMLElement = sectionEl || clone;
+
+  const w = targetEl.scrollWidth || CAPTURE_WIDTH;
+  const h = targetEl.scrollHeight;
+
+  const dataUrl = await toPng(targetEl, {
+    quality: 1.0,
+    pixelRatio: 2,
+    backgroundColor: '#ffffff',
+    cacheBust: true,
+    canvasWidth: w,
+    canvasHeight: h,
+    width: w,
+    height: h,
+  });
+
+  document.body.removeChild(container);
+  return { dataUrl, w, h };
+}
+
+/**
+ * Helper: adds one captured image to the current PDF page with margin + footer watermark.
+ */
+function addImagePage(
+  pdf: jsPDF,
+  dataUrl: string,
+  imgW: number,
+  imgH: number,
+  footerLabel?: string
+) {
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const margin = 6;
+  const availableWidth = pageWidth - margin * 2;
+  const availableHeight = pageHeight - margin * 2 - 5; // 5mm footer reserve
+
+  const scale = Math.min(availableWidth / imgW, availableHeight / imgH);
+  const renderWidth = imgW * scale;
+  const renderHeight = imgH * scale;
+  const offsetX = margin + (availableWidth - renderWidth) / 2;
+  const offsetY = margin + (availableHeight - renderHeight) / 2;
+
+  pdf.addImage(dataUrl, 'PNG', offsetX, offsetY, renderWidth, renderHeight, undefined, 'FAST');
+
+  // Footer watermark
+  pdf.setFont('helvetica', 'normal');
+  pdf.setFontSize(7.5);
+  pdf.setTextColor(140, 145, 160);
+  const footerText = footerLabel
+    ? `Timetable Allocator · ${footerLabel}`
+    : 'Timetable Allocator · Created by Muchkundraje Thote';
+  pdf.text(footerText, pageWidth / 2, pageHeight - 2.5, { align: 'center' });
+}
+
+/**
  * High-fidelity Snapshot-based PDF Exporter.
- * Scales content proportionally to fit seamlessly on a single A4 landscape page
- * so no tables, headers, or matrices are sliced or broken across pages.
+ *
+ * twoPage = true  (default): Page 1 = timetable grid, Page 2 = labels/reference section.
+ * twoPage = false           : Whole sheet on one A4 landscape page.
  */
 export async function exportElementToPdf(
   element: HTMLElement,
   filename: string,
-  orientation: 'landscape' | 'portrait' = 'landscape'
+  orientation: 'landscape' | 'portrait' = 'landscape',
+  twoPage = true
 ) {
   try {
-    const { dataUrl, w, h } = await captureElement(element);
-
     const pdf = new jsPDF({ orientation, unit: 'mm', format: 'a4' });
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    const pageHeight = pdf.internal.pageSize.getHeight();
-    const margin = 6;
-    const availableWidth = pageWidth - margin * 2;
-    const availableHeight = pageHeight - margin * 2 - 4; // reserve 4mm for bottom watermark
 
-    // Fit content proportionally onto the single page
-    const scale = Math.min(availableWidth / w, availableHeight / h);
-    const renderWidth = w * scale;
-    const renderHeight = h * scale;
-    const offsetX = margin + (availableWidth - renderWidth) / 2;
-    const offsetY = margin + (availableHeight - renderHeight) / 2;
+    if (twoPage) {
+      // Page 1: Timetable Grid
+      const { dataUrl: gridUrl, w: gW, h: gH } = await captureElementSection(element, 'grid');
+      addImagePage(pdf, gridUrl, gW, gH, 'Page 1 — Timetable Grid');
 
-    pdf.addImage(
-      dataUrl, 'PNG',
-      offsetX, offsetY,
-      renderWidth, renderHeight,
-      undefined, 'FAST'
-    );
-
-    // PDF Watermark Footer
-    pdf.setFont('helvetica', 'normal');
-    pdf.setFontSize(7.5);
-    pdf.setTextColor(140, 145, 160);
-    pdf.text(
-      'Timetable Allocator · Created by Muchkundraje Thote',
-      pageWidth / 2,
-      pageHeight - 2.5,
-      { align: 'center' }
-    );
+      // Page 2: Labels / Reference
+      pdf.addPage();
+      const { dataUrl: labelsUrl, w: lW, h: lH } = await captureElementSection(element, 'labels');
+      addImagePage(pdf, labelsUrl, lW, lH, 'Page 2 — Subject & Faculty Reference');
+    } else {
+      const { dataUrl, w, h } = await captureElement(element);
+      addImagePage(pdf, dataUrl, w, h);
+    }
 
     pdf.save(`${filename}.pdf`);
     return true;
@@ -109,50 +185,37 @@ export async function exportElementToPdf(
 }
 
 /**
- * Bulk Multi-page PDF Snapshot Exporter — each entity gets exactly one clean page.
+ * Bulk Multi-page PDF Snapshot Exporter.
+ *
+ * twoPage = true  (default): Each entity gets 2 pages — grid + labels.
+ * twoPage = false           : Each entity gets 1 page.
  */
 export async function exportMultipleElementsToPdf(
   elements: { element: HTMLElement; title: string }[],
   filename: string,
-  orientation: 'landscape' | 'portrait' = 'landscape'
+  orientation: 'landscape' | 'portrait' = 'landscape',
+  twoPage = true
 ) {
   try {
     const pdf = new jsPDF({ orientation, unit: 'mm', format: 'a4' });
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    const pageHeight = pdf.internal.pageSize.getHeight();
-    const margin = 6;
-    const availableWidth = pageWidth - margin * 2;
-    const availableHeight = pageHeight - margin * 2 - 4;
 
     for (let i = 0; i < elements.length; i++) {
-      const { element } = elements[i];
+      const { element, title } = elements[i];
       if (i > 0) pdf.addPage();
 
-      const { dataUrl, w, h } = await captureElement(element);
+      if (twoPage) {
+        // Page A: Timetable grid
+        const { dataUrl: gridUrl, w: gW, h: gH } = await captureElementSection(element, 'grid');
+        addImagePage(pdf, gridUrl, gW, gH, `${title} · Page 1 — Timetable Grid`);
 
-      const scale = Math.min(availableWidth / w, availableHeight / h);
-      const renderWidth = w * scale;
-      const renderHeight = h * scale;
-      const offsetX = margin + (availableWidth - renderWidth) / 2;
-      const offsetY = margin + (availableHeight - renderHeight) / 2;
-
-      pdf.addImage(
-        dataUrl, 'PNG',
-        offsetX, offsetY,
-        renderWidth, renderHeight,
-        undefined, 'FAST'
-      );
-
-      // PDF Watermark Footer
-      pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(7.5);
-      pdf.setTextColor(140, 145, 160);
-      pdf.text(
-        'Timetable Allocator · Created by Muchkundraje Thote',
-        pageWidth / 2,
-        pageHeight - 2.5,
-        { align: 'center' }
-      );
+        // Page B: Labels / Reference
+        pdf.addPage();
+        const { dataUrl: labelsUrl, w: lW, h: lH } = await captureElementSection(element, 'labels');
+        addImagePage(pdf, labelsUrl, lW, lH, `${title} · Page 2 — Subject & Faculty Reference`);
+      } else {
+        const { dataUrl, w, h } = await captureElement(element);
+        addImagePage(pdf, dataUrl, w, h, title);
+      }
     }
 
     pdf.save(`${filename}.pdf`);
@@ -169,7 +232,6 @@ export async function exportMultipleElementsToPdf(
 export function printElementDirectly(element: HTMLElement) {
   try {
     const printFrame = document.createElement('iframe');
-    // Must be non-zero width so content lays out correctly before printing
     printFrame.style.cssText = [
       'position:fixed',
       'top:-99999px',

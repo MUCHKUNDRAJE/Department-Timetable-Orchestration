@@ -10,6 +10,12 @@ export interface TimeSlot {
 
 export type TargetType = 'class' | 'lab' | 'room';
 
+export interface ClassBatch {
+  name: string; // e.g. "A1", "A2", "A3", "A4"
+  fromRollNo: number; // e.g. 1
+  toRollNo: number; // e.g. 18
+}
+
 export interface CollegeClass {
   id: string;
   name: string; // e.g. "AIDS 7th Sem A"
@@ -18,6 +24,7 @@ export interface CollegeClass {
   section: string;
   studentCount?: number;
   classTeacherId?: string; // ID of faculty assigned as Class Teacher
+  batches?: ClassBatch[]; // Practical batches with roll number ranges
 }
 
 export interface Lab {
@@ -42,6 +49,7 @@ export interface Subject {
   code: string;
   abbreviation?: string; // Short code (e.g. DL, NLP, OT) for compact displays
   type: 'lecture' | 'lab';
+  credits?: number; // Course credits (up to 4, e.g. 1, 2, 3, 4)
   color: string;
   department: string;
   semester: number;

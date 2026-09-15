@@ -1005,7 +1005,10 @@ export function SlotDrawer() {
                                 {s.code}
                               </span>
                               <span className="font-medium">{s.name}</span>
-                              <span className="text-muted-foreground text-[10px] ml-auto">{s.type.toUpperCase()}</span>
+                              <span className="text-muted-foreground text-[10px] ml-auto flex items-center gap-1.5">
+                                <span className="font-mono font-semibold bg-amber-50 text-amber-800 border border-amber-200 px-1 rounded">{s.credits ?? 2}Cr</span>
+                                <span>{s.type.toUpperCase()}</span>
+                              </span>
                             </div>
                           </SelectItem>
                         ))}
@@ -1153,7 +1156,10 @@ export function SlotDrawer() {
                       <div className="flex items-center gap-2">
                         <span className="font-mono font-bold text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">{s.code}</span>
                         <span className="font-medium">{s.name}</span>
-                        <span className="text-muted-foreground text-[11px] ml-auto">{s.type.toUpperCase()}</span>
+                        <span className="text-muted-foreground text-[11px] ml-auto flex items-center gap-1.5">
+                          <span className="font-mono font-semibold bg-amber-50 text-amber-800 border border-amber-200 px-1 rounded">{s.credits ?? 3}Cr</span>
+                          <span>{s.type.toUpperCase()}</span>
+                        </span>
                       </div>
                     </SelectItem>
                   ))}

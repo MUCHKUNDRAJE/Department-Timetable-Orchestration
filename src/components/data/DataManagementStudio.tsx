@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import * as XLSX from 'xlsx';
+
 import { motion } from 'framer-motion';
 import {
   Users,
@@ -22,9 +24,11 @@ import {
   Lock,
   Eye,
   EyeOff,
+  FileSpreadsheet,
 } from 'lucide-react';
+
 import { useTimetableStore } from '@/lib/store';
-import { CollegeClass, Lab, Room, Faculty, Subject } from '@/types/timetable';
+import { CollegeClass, ClassBatch, Lab, Room, Faculty, Subject } from '@/types/timetable';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Drawer } from '@/components/ui/Drawer';
@@ -98,8 +102,27 @@ export function DataManagementStudio() {
   // Async UI state
   const [isSaving, setIsSaving] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [isImportingExcel, setIsImportingExcel] = useState(false);
+  const subjectExcelImportRef = useRef<HTMLInputElement>(null);
 
-  // Form Fields State
+
+  // Searchable form field states (Class Teacher combobox + Subjects search bar)
+  const [facultySearchQuery, setFacultySearchQuery] = useState('');
+  const [classTcherDropdownOpen, setClassTcherDropdownOpen] = useState(false);
+  const [subjectSearchQuery, setSubjectSearchQuery] = useState('');
+  const classTcherRef = useRef<HTMLDivElement>(null);
+
+  // Click-outside handler: close Class Teacher combobox dropdown
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (classTcherRef.current && !classTcherRef.current.contains(e.target as Node)) {
+        setClassTcherDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
   const [formData, setFormData] = useState<any>({});
 
   const handleApplySession = (sessionToApply: string) => {
@@ -151,8 +174,14 @@ export function DataManagementStudio() {
         department: 'Artificial Intelligence & Data Science',
         semester: 7,
         section: 'A',
-        studentCount: 60,
+        studentCount: 64,
         classTeacherId: '',
+        batches: [
+          { name: 'A1', fromRollNo: 1, toRollNo: 16 },
+          { name: 'A2', fromRollNo: 17, toRollNo: 32 },
+          { name: 'A3', fromRollNo: 33, toRollNo: 48 },
+          { name: 'A4', fromRollNo: 49, toRollNo: 64 },
+        ],
       });
     } else if (activeTab === 'labs') {
       setFormData({
@@ -185,17 +214,38 @@ export function DataManagementStudio() {
         code: '',
         abbreviation: '',
         type: 'lecture',
+        credits: 3,
         color: '#5755FE',
         department: 'AIDS',
         semester: 7,
       });
     }
+    setFacultySearchQuery('');
+    setSubjectSearchQuery('');
+    setClassTcherDropdownOpen(false);
     setIsDrawerOpen(true);
   };
 
   const handleOpenEdit = (item: any) => {
     setEditingItem(item);
-    setFormData({ ...item });
+    if (activeTab === 'classes') {
+      const sec = item.section || 'A';
+      const defaultBatches = [
+        { name: `${sec}1`, fromRollNo: 1, toRollNo: 16 },
+        { name: `${sec}2`, fromRollNo: 17, toRollNo: 32 },
+        { name: `${sec}3`, fromRollNo: 33, toRollNo: 48 },
+        { name: `${sec}4`, fromRollNo: 49, toRollNo: 64 },
+      ];
+      setFormData({
+        ...item,
+        batches: (item.batches && item.batches.length > 0) ? item.batches : defaultBatches,
+      });
+    } else {
+      setFormData({ ...item });
+    }
+    setFacultySearchQuery('');
+    setSubjectSearchQuery('');
+    setClassTcherDropdownOpen(false);
     setIsDrawerOpen(true);
   };
 
@@ -204,6 +254,26 @@ export function DataManagementStudio() {
     setIsSaving(true);
     setApiError(null);
     const itemName = formData.name || formData.code || 'Record';
+    if (activeTab === 'classes') {
+      const batches = formData.batches || [];
+      if (batches.length !== 4) {
+        toast.error('Validation Error', 'Each class must have exactly 4 batches configured (e.g. A1, A2, A3, A4).');
+        setIsSaving(false);
+        return;
+      }
+      for (const b of batches) {
+        if (!b.name || !b.name.trim()) {
+          toast.error('Validation Error', 'All 4 batches must have a valid batch name.');
+          setIsSaving(false);
+          return;
+        }
+        if (Number(b.fromRollNo) > Number(b.toRollNo)) {
+          toast.error('Validation Error', `Batch ${b.name}: 'From Roll No' cannot be greater than 'To Roll No'.`);
+          setIsSaving(false);
+          return;
+        }
+      }
+    }
     try {
       if (editingItem) {
         if (activeTab === 'classes') await updateClass(editingItem.id, formData);
@@ -294,6 +364,150 @@ export function DataManagementStudio() {
     reader.readAsText(file);
     e.target.value = '';
   };
+
+  /**
+   * Excel Import for Subjects — parses YCCE Scheme of Examination format.
+   * Columns expected: SN | Sub. Code | Subject | T/P | Hrs | Credit
+   * Semester is inferred from merged header rows like "THIRD SEMESTER", "FIFTH SEMESTER", etc.
+   */
+  const handleImportSubjectsFromExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setIsImportingExcel(true);
+
+    const semesterWordMap: Record<string, number> = {
+      first: 1, second: 2, third: 3, fourth: 4,
+      fifth: 5, sixth: 6, seventh: 7, eighth: 8,
+    };
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
+      let currentSemester = 7; // fallback
+      let importedCount = 0;
+      let skippedCount = 0;
+      const existingCodes = new Set(subjects.map((s) => s.code.toLowerCase().trim()));
+
+      // Detect department from the sheet header rows (first 5 rows)
+      let detectedDept = 'AIDS';
+      for (let i = 0; i < Math.min(5, rows.length); i++) {
+        const rowStr = rows[i].join(' ').toLowerCase();
+        if (rowStr.includes('computer technology') || rowStr.includes('iot')) detectedDept = 'CT';
+        else if (rowStr.includes('artificial intelligence') || rowStr.includes('aids') || rowStr.includes('ai & ds')) detectedDept = 'AIDS';
+        else if (rowStr.includes('electronics') || rowStr.includes('entc')) detectedDept = 'ENTC';
+        else if (rowStr.includes('mechanical')) detectedDept = 'MECH';
+        else if (rowStr.includes('civil')) detectedDept = 'CIVIL';
+      }
+
+      for (const row of rows) {
+        const cellValues = row.map((c: any) => String(c ?? '').trim());
+        const fullRow = cellValues.join(' ').toLowerCase();
+
+        // Detect semester header rows (e.g. "THIRD SEMESTER", "FIFTH SEMESTER")
+        const semMatch = fullRow.match(
+          /(first|second|third|fourth|fifth|sixth|seventh|eighth)\s+semester/i
+        );
+        if (semMatch) {
+          const word = semMatch[1].toLowerCase();
+          currentSemester = semesterWordMap[word] ?? currentSemester;
+          continue;
+        }
+
+        // Try to extract subject code (e.g. 23IOT1501, 23ADS1234)
+        // Columns order: SN | Sub. Code | Subject | T/P | Hrs | Credit
+        // The Sub. Code cell looks like: 23IOT1501 / 23ADS1234
+        let subCode = '';
+        let subName = '';
+        let typeChar = 'T'; // T = lecture, P = lab
+        let credit = 3;
+
+        // Find which column has the subject code (a cell matching alphanumeric code pattern)
+        for (let ci = 0; ci < cellValues.length; ci++) {
+          const val = cellValues[ci];
+          if (/^\d{2}[A-Z]{2,5}\d{4}$/.test(val) || /^[A-Z]{2,6}\d{4,}$/.test(val) || /^MDM\w+/.test(val)) {
+            subCode = val;
+            // Subject name is the next non-empty cell
+            for (let ni = ci + 1; ni < cellValues.length; ni++) {
+              if (cellValues[ni] && !/^[TtPp]$/.test(cellValues[ni]) && isNaN(Number(cellValues[ni]))) {
+                subName = cellValues[ni];
+                break;
+              }
+            }
+            // T/P column: find the first T or P after the code
+            for (let ni = ci + 1; ni < cellValues.length; ni++) {
+              if (/^[TtPp]$/.test(cellValues[ni])) {
+                typeChar = cellValues[ni].toUpperCase();
+                break;
+              }
+            }
+            // Credit: last numeric cell in the row (usually the rightmost)
+            for (let ni = cellValues.length - 1; ni > ci; ni--) {
+              const num = parseInt(cellValues[ni]);
+              if (!isNaN(num) && num >= 1 && num <= 4) {
+                credit = num;
+                break;
+              }
+            }
+            break;
+          }
+        }
+
+        if (!subCode || !subName) continue;
+        if (existingCodes.has(subCode.toLowerCase())) {
+          skippedCount++;
+          continue;
+        }
+
+        const subjectType = typeChar === 'P' ? 'lab' : 'lecture';
+
+        // Generate abbreviation: uppercase initials of meaningful words
+        const abbr = subName
+          .replace(/\b(of|and|the|in|a|for|to|&)\b/gi, '')
+          .split(/\s+/)
+          .filter(Boolean)
+          .map((w: string) => w[0].toUpperCase())
+          .join('')
+          .slice(0, 6);
+
+        await addSubject({
+          name: subName,
+          code: subCode,
+          abbreviation: abbr,
+          type: subjectType,
+          credits: credit,
+          color: '#5755FE',
+          department: detectedDept,
+          semester: currentSemester,
+        });
+
+        existingCodes.add(subCode.toLowerCase());
+        importedCount++;
+      }
+
+      if (importedCount > 0) {
+        toast.success(
+          'Subjects Imported',
+          `${importedCount} subjects imported successfully.${skippedCount > 0 ? ` ${skippedCount} skipped (duplicates).` : ''}`
+        );
+      } else if (skippedCount > 0) {
+        toast.warning('Nothing New', `All ${skippedCount} subjects already exist in the database.`);
+      } else {
+        toast.warning('No Data Found', 'Could not detect any valid subject rows. Check the Excel format (Sub. Code + Subject columns required).');
+      }
+    } catch (err: any) {
+      const msg = err.message || 'Failed to parse Excel file.';
+      setApiError(msg);
+      toast.error('Excel Import Failed', msg);
+    } finally {
+      setIsImportingExcel(false);
+    }
+  };
+
 
   const tabs = [
     { id: 'classes' as EntityTab, label: 'Classes', count: classes.length, icon: Users },
@@ -467,6 +681,32 @@ export function DataManagementStudio() {
             </span>
           </label>
 
+          {/* Excel Import for Subjects — only shown on Subjects tab */}
+          {activeTab === 'subjects' && (
+            <label className="cursor-pointer" title="Import subjects from YCCE Scheme of Examination Excel file">
+              <input
+                ref={subjectExcelImportRef}
+                type="file"
+                accept=".xlsx,.xls,.ods"
+                onChange={handleImportSubjectsFromExcel}
+                className="hidden"
+              />
+              <span
+                className={`inline-flex items-center justify-center font-medium transition-all duration-150 border text-xs px-2.5 py-1.5 rounded-lg gap-1.5 shadow-xs select-none ${
+                  isImportingExcel
+                    ? 'border-emerald-300 bg-emerald-50 text-emerald-700 cursor-wait'
+                    : 'border-emerald-400 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-500'
+                }`}
+              >
+                {isImportingExcel ? (
+                  <><span className="animate-spin text-xs">⏳</span> Importing...</>
+                ) : (
+                  <><FileSpreadsheet className="w-3.5 h-3.5" /> Import Excel</>
+                )}
+              </span>
+            </label>
+          )}
+
           <Button
             variant="primary"
             size="md"
@@ -478,6 +718,7 @@ export function DataManagementStudio() {
           </Button>
         </div>
       </div>
+
 
       {/* Search Input Bar */}
       <div className="bg-surface border border-border rounded-2xl p-3 shadow-subtle flex items-center gap-3">
@@ -501,6 +742,7 @@ export function DataManagementStudio() {
                 <tr>
                   <th className="p-4">Class Name</th>
                   <th className="p-4">Class Teacher</th>
+                  <th className="p-4">Batches & Roll Range</th>
                   <th className="p-4">Department</th>
                   <th className="p-4">Semester</th>
                   <th className="p-4">Section</th>
@@ -527,6 +769,28 @@ export function DataManagementStudio() {
                           ) : (
                             <span className="text-muted text-xs italic">Unassigned</span>
                           )}
+                        </td>
+                        <td className="p-4">
+                          <div className="flex flex-wrap gap-1 max-w-[260px]">
+                            {((c.batches && c.batches.length > 0)
+                              ? c.batches
+                              : [
+                                  { name: `${c.section || 'A'}1`, fromRollNo: 1, toRollNo: 16 },
+                                  { name: `${c.section || 'A'}2`, fromRollNo: 17, toRollNo: 32 },
+                                  { name: `${c.section || 'A'}3`, fromRollNo: 33, toRollNo: 48 },
+                                  { name: `${c.section || 'A'}4`, fromRollNo: 49, toRollNo: 64 },
+                                ]
+                            ).map((b, idx) => (
+                              <span
+                                key={idx}
+                                className="inline-flex items-center gap-1 font-mono text-[10px] font-bold bg-indigo-50 text-indigo-900 border border-indigo-200 px-1.5 py-0.5 rounded shadow-xs"
+                                title={`Batch ${b.name}: Roll ${b.fromRollNo} to ${b.toRollNo}`}
+                              >
+                                <span className="text-indigo-700 font-extrabold">{b.name}:</span>
+                                <span className="text-slate-600 font-medium">{b.fromRollNo}–{b.toRollNo}</span>
+                              </span>
+                            ))}
+                          </div>
                         </td>
                         <td className="p-4 text-muted-foreground">{c.department}</td>
                         <td className="p-4">
@@ -773,6 +1037,7 @@ export function DataManagementStudio() {
                   <th className="p-4">Code</th>
                   <th className="p-4">Subject Name</th>
                   <th className="p-4">Type</th>
+                  <th className="p-4 text-center">Credits</th>
                   <th className="p-4">Semester</th>
                   <th className="p-4 text-right">Actions</th>
                 </tr>
@@ -797,6 +1062,11 @@ export function DataManagementStudio() {
                         <Badge variant={s.type === 'lab' ? 'highlight' : 'primary'} size="sm">
                           {s.type.toUpperCase()}
                         </Badge>
+                      </td>
+                      <td className="p-4 text-center">
+                        <span className="font-mono font-bold text-xs bg-amber-50 text-amber-900 border border-amber-200 px-2.5 py-0.5 rounded shadow-xs">
+                          {s.credits ?? (s.type === 'lab' ? 2 : 3)} Cr
+                        </span>
                       </td>
                       <td className="p-4 font-mono text-muted">Sem {s.semester}</td>
                       <td className="p-4 text-right">
@@ -871,38 +1141,291 @@ export function DataManagementStudio() {
                   <input
                     type="text"
                     value={formData.section ?? ''}
-                    onChange={(e) => setFormData({ ...formData, section: e.target.value })}
+                    onChange={(e) => {
+                      const newSec = e.target.value;
+                      const secLetter = newSec.trim().toUpperCase() || 'A';
+                      const currentBatches = formData.batches || [];
+                      const updatedBatches = currentBatches.length === 4
+                        ? currentBatches.map((b: any, idx: number) => ({
+                            ...b,
+                            name: `${secLetter}${idx + 1}`,
+                          }))
+                        : [
+                            { name: `${secLetter}1`, fromRollNo: 1, toRollNo: 16 },
+                            { name: `${secLetter}2`, fromRollNo: 17, toRollNo: 32 },
+                            { name: `${secLetter}3`, fromRollNo: 33, toRollNo: 48 },
+                            { name: `${secLetter}4`, fromRollNo: 49, toRollNo: 64 },
+                          ];
+                      setFormData({ ...formData, section: newSec, batches: updatedBatches });
+                    }}
                     className="w-full bg-surface border border-border rounded-xl px-3.5 py-2 text-sm text-foreground focus:ring-2 focus:ring-accent"
                   />
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-bold text-foreground uppercase mb-1">
-                  Department
-                </label>
-                <input
-                  type="text"
-                  value={formData.department ?? ''}
-                  onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                  className="w-full bg-surface border border-border rounded-xl px-3.5 py-2 text-sm text-foreground focus:ring-2 focus:ring-accent"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-foreground uppercase mb-1">
+                    Department
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.department ?? ''}
+                    onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                    className="w-full bg-surface border border-border rounded-xl px-3.5 py-2 text-sm text-foreground focus:ring-2 focus:ring-accent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-foreground uppercase mb-1">
+                    Total Student Count
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={formData.studentCount || 64}
+                    onChange={(e) => {
+                      const count = parseInt(e.target.value) || 64;
+                      setFormData({ ...formData, studentCount: count });
+                    }}
+                    className="w-full bg-surface border border-border rounded-xl px-3.5 py-2 text-sm text-foreground focus:ring-2 focus:ring-accent"
+                  />
+                </div>
               </div>
-              <div>
+
+              {/* Mandatory 4 Practical Batches & Roll Number Allocation */}
+              <div className="p-3 bg-surface-subtle border border-border rounded-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <label className="block text-xs font-bold text-foreground uppercase">
+                        Mandatory 4 Practical Batches (A1, A2, A3, A4)
+                      </label>
+                      <span className="text-[10px] font-mono font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded">
+                        4 Batches Required
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Configure roll number range for all 4 practical batches in this section.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const sec = (formData.section || 'A').trim().toUpperCase() || 'A';
+                      const count = parseInt(formData.studentCount) || 64;
+                      const batchSize = Math.ceil(count / 4);
+                      const autoBatches = [
+                        { name: `${sec}1`, fromRollNo: 1, toRollNo: batchSize },
+                        { name: `${sec}2`, fromRollNo: batchSize + 1, toRollNo: batchSize * 2 },
+                        { name: `${sec}3`, fromRollNo: batchSize * 2 + 1, toRollNo: batchSize * 3 },
+                        { name: `${sec}4`, fromRollNo: batchSize * 3 + 1, toRollNo: count },
+                      ];
+                      setFormData({ ...formData, batches: autoBatches });
+                      toast.info('Batches Recalculated', `Distributed 1 to ${count} evenly across 4 batches.`);
+                    }}
+                    className="text-[11px] font-semibold text-primary hover:text-primary-dark bg-primary/10 hover:bg-primary/20 px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 shrink-0"
+                  >
+                    <Sparkles className="w-3 h-3" /> Auto 4 Batches
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  {(formData.batches && formData.batches.length === 4
+                    ? formData.batches
+                    : [
+                        { name: `${(formData.section || 'A').toUpperCase()}1`, fromRollNo: 1, toRollNo: 16 },
+                        { name: `${(formData.section || 'A').toUpperCase()}2`, fromRollNo: 17, toRollNo: 32 },
+                        { name: `${(formData.section || 'A').toUpperCase()}3`, fromRollNo: 33, toRollNo: 48 },
+                        { name: `${(formData.section || 'A').toUpperCase()}4`, fromRollNo: 49, toRollNo: 64 },
+                      ]
+                  ).map((batch: any, index: number) => {
+                    const studentNum = Number(batch.toRollNo) - Number(batch.fromRollNo) + 1;
+                    return (
+                      <div key={index} className="flex items-center gap-2 bg-surface p-2.5 rounded-xl border border-border">
+                        <div className="w-24 shrink-0">
+                          <label className="block text-[10px] font-bold text-muted-foreground uppercase mb-0.5">
+                            Batch {index + 1}
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={batch.name || ''}
+                            onChange={(e) => {
+                              const currentBatches = formData.batches && formData.batches.length === 4
+                                ? [...formData.batches]
+                                : [
+                                    { name: `${(formData.section || 'A').toUpperCase()}1`, fromRollNo: 1, toRollNo: 16 },
+                                    { name: `${(formData.section || 'A').toUpperCase()}2`, fromRollNo: 17, toRollNo: 32 },
+                                    { name: `${(formData.section || 'A').toUpperCase()}3`, fromRollNo: 33, toRollNo: 48 },
+                                    { name: `${(formData.section || 'A').toUpperCase()}4`, fromRollNo: 49, toRollNo: 64 },
+                                  ];
+                              currentBatches[index] = { ...currentBatches[index], name: e.target.value.toUpperCase() };
+                              setFormData({ ...formData, batches: currentBatches });
+                            }}
+                            placeholder={`e.g. ${(formData.section || 'A').toUpperCase()}${index + 1}`}
+                            className="w-full bg-surface-subtle border border-border rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold uppercase text-foreground focus:ring-1 focus:ring-accent"
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <label className="block text-[10px] font-bold text-muted-foreground uppercase mb-0.5">
+                            From Roll No
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            required
+                            value={batch.fromRollNo ?? ''}
+                            onChange={(e) => {
+                              const currentBatches = formData.batches && formData.batches.length === 4
+                                ? [...formData.batches]
+                                : [
+                                    { name: `${(formData.section || 'A').toUpperCase()}1`, fromRollNo: 1, toRollNo: 16 },
+                                    { name: `${(formData.section || 'A').toUpperCase()}2`, fromRollNo: 17, toRollNo: 32 },
+                                    { name: `${(formData.section || 'A').toUpperCase()}3`, fromRollNo: 33, toRollNo: 48 },
+                                    { name: `${(formData.section || 'A').toUpperCase()}4`, fromRollNo: 49, toRollNo: 64 },
+                                  ];
+                              currentBatches[index] = { ...currentBatches[index], fromRollNo: parseInt(e.target.value) || 1 };
+                              setFormData({ ...formData, batches: currentBatches });
+                            }}
+                            placeholder="1"
+                            className="w-full bg-surface-subtle border border-border rounded-lg px-2.5 py-1.5 text-xs font-mono text-foreground focus:ring-1 focus:ring-accent"
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <label className="block text-[10px] font-bold text-muted-foreground uppercase mb-0.5">
+                            To Roll No
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            required
+                            value={batch.toRollNo ?? ''}
+                            onChange={(e) => {
+                              const currentBatches = formData.batches && formData.batches.length === 4
+                                ? [...formData.batches]
+                                : [
+                                    { name: `${(formData.section || 'A').toUpperCase()}1`, fromRollNo: 1, toRollNo: 16 },
+                                    { name: `${(formData.section || 'A').toUpperCase()}2`, fromRollNo: 17, toRollNo: 32 },
+                                    { name: `${(formData.section || 'A').toUpperCase()}3`, fromRollNo: 33, toRollNo: 48 },
+                                    { name: `${(formData.section || 'A').toUpperCase()}4`, fromRollNo: 49, toRollNo: 64 },
+                                  ];
+                              currentBatches[index] = { ...currentBatches[index], toRollNo: parseInt(e.target.value) || 1 };
+                              setFormData({ ...formData, batches: currentBatches });
+                            }}
+                            placeholder="16"
+                            className="w-full bg-surface-subtle border border-border rounded-lg px-2.5 py-1.5 text-xs font-mono text-foreground focus:ring-1 focus:ring-accent"
+                          />
+                        </div>
+                        <div className="w-24 text-center shrink-0 pt-3.5">
+                          <span className="inline-block text-[11px] font-mono font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-1 rounded-md">
+                            {studentNum > 0 ? `${studentNum} Stds` : '—'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              <div ref={classTcherRef} className="relative">
                 <label className="block text-xs font-bold text-foreground uppercase mb-1">
                   Class Teacher (Faculty Incharge)
                 </label>
-                <select
-                  value={formData.classTeacherId || ''}
-                  onChange={(e) => setFormData({ ...formData, classTeacherId: e.target.value || undefined })}
-                  className="w-full bg-surface border border-border rounded-xl px-3.5 py-2 text-sm text-foreground focus:ring-2 focus:ring-accent"
-                >
-                  <option value="">-- No Class Teacher Assigned --</option>
-                  {faculty.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.name} ({getFacultyInitials(f)}) — {f.designation}
-                    </option>
-                  ))}
-                </select>
+                {/* Searchable Combobox */}
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                    <Search className="w-3.5 h-3.5 text-muted-foreground" />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Search faculty by name or initials…"
+                    value={facultySearchQuery}
+                    onFocus={() => setClassTcherDropdownOpen(true)}
+                    onChange={(e) => {
+                      setFacultySearchQuery(e.target.value);
+                      setClassTcherDropdownOpen(true);
+                    }}
+                    className="w-full bg-surface border border-border rounded-xl pl-8 pr-3.5 py-2 text-sm text-foreground focus:ring-2 focus:ring-accent"
+                  />
+                  {formData.classTeacherId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData({ ...formData, classTeacherId: undefined });
+                        setFacultySearchQuery('');
+                      }}
+                      className="absolute inset-y-0 right-3 flex items-center text-muted-foreground hover:text-foreground text-xs"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+                {/* Currently selected badge */}
+                {formData.classTeacherId && (() => {
+                  const sel = faculty.find((f) => f.id === formData.classTeacherId);
+                  return sel ? (
+                    <div className="mt-1.5 flex items-center gap-1.5 text-[11px] font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg px-2 py-1">
+                      <span className="font-mono font-black">[{getFacultyInitials(sel)}]</span>
+                      <span>{sel.name}</span>
+                      <span className="text-muted-foreground">— {sel.designation}</span>
+                    </div>
+                  ) : null;
+                })()}
+                {/* Dropdown list */}
+                {classTcherDropdownOpen && (
+                  <div className="absolute z-50 mt-1 w-full bg-surface border border-border rounded-xl shadow-xl overflow-hidden">
+                    <div className="max-h-48 overflow-y-auto">
+                      <button
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          setFormData({ ...formData, classTeacherId: undefined });
+                          setFacultySearchQuery('');
+                          setClassTcherDropdownOpen(false);
+                        }}
+                        className="w-full text-left px-3.5 py-2 text-xs text-muted-foreground hover:bg-surface-subtle border-b border-border"
+                      >
+                        — No Class Teacher Assigned —
+                      </button>
+                      {faculty
+                        .filter((f) => {
+                          const q = facultySearchQuery.toLowerCase();
+                          return (
+                            !q ||
+                            f.name.toLowerCase().includes(q) ||
+                            getFacultyInitials(f).toLowerCase().includes(q) ||
+                            f.designation.toLowerCase().includes(q)
+                          );
+                        })
+                        .map((f) => (
+                          <button
+                            key={f.id}
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => {
+                              setFormData({ ...formData, classTeacherId: f.id });
+                              setFacultySearchQuery('');
+                              setClassTcherDropdownOpen(false);
+                            }}
+                            className={cn(
+                              'w-full text-left px-3.5 py-2 text-xs hover:bg-surface-subtle flex items-center gap-2',
+                              formData.classTeacherId === f.id && 'bg-indigo-50 text-indigo-700'
+                            )}
+                          >
+                            <span className="font-mono font-black text-indigo-800">[{getFacultyInitials(f)}]</span>
+                            <span className="font-medium text-foreground">{f.name}</span>
+                            <span className="text-muted-foreground ml-auto">{f.designation}</span>
+                          </button>
+                        ))}
+                      {faculty.filter((f) => {
+                        const q = facultySearchQuery.toLowerCase();
+                        return !q || f.name.toLowerCase().includes(q) || getFacultyInitials(f).toLowerCase().includes(q);
+                      }).length === 0 && (
+                        <div className="px-3.5 py-3 text-xs text-muted-foreground text-center italic">
+                          No faculty match "{facultySearchQuery}"
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
                 <span className="text-[11px] text-muted-foreground mt-1 block">
                   Assigning a Class Teacher displays their name on this class timetable and tags this class in their faculty profile.
                 </span>
@@ -1160,34 +1683,81 @@ export function DataManagementStudio() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-foreground uppercase mb-2">
-                    Assigned Subjects Taught (Multi-select)
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-bold text-foreground uppercase">
+                      Assigned Subjects Taught (Multi-select)
+                    </label>
+                    {(formData.subjectIds || []).length > 0 && (
+                      <span className="text-[10.5px] font-mono text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-md px-1.5 py-0.5">
+                        {(formData.subjectIds || []).length} selected
+                      </span>
+                    )}
+                  </div>
+                  {/* Search bar */}
+                  <div className="relative mb-1.5">
+                    <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                      <Search className="w-3.5 h-3.5 text-muted-foreground" />
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Search subjects by name, code, or abbreviation…"
+                      value={subjectSearchQuery}
+                      onChange={(e) => setSubjectSearchQuery(e.target.value)}
+                      className="w-full bg-surface border border-border rounded-xl pl-8 pr-3.5 py-2 text-sm text-foreground focus:ring-2 focus:ring-accent"
+                    />
+                    {subjectSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setSubjectSearchQuery('')}
+                        className="absolute inset-y-0 right-3 flex items-center text-muted-foreground hover:text-foreground text-xs"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
                   <div className="space-y-1.5 max-h-48 overflow-y-auto p-2 border border-border rounded-xl bg-surface-subtle">
-                    {subjects.map((s) => {
-                      const isChecked = (formData.subjectIds || []).includes(s.id);
-                      return (
-                        <label
-                          key={s.id}
-                          className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-surface text-xs font-medium cursor-pointer"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={(e) => {
-                              const current = formData.subjectIds || [];
-                              const updated = e.target.checked
-                                ? [...current, s.id]
-                                : current.filter((id: string) => id !== s.id);
-                              setFormData({ ...formData, subjectIds: updated });
-                            }}
-                            className="rounded text-primary focus:ring-accent"
-                          />
-                          <span className="font-mono font-bold text-foreground">{s.abbreviation || s.code}</span>
-                          <span className="truncate text-muted-foreground">{s.name}</span>
-                        </label>
-                      );
-                    })}
+                    {subjects
+                      .filter((s) => {
+                        const q = subjectSearchQuery.toLowerCase();
+                        return (
+                          !q ||
+                          s.name.toLowerCase().includes(q) ||
+                          (s.code || '').toLowerCase().includes(q) ||
+                          (s.abbreviation || '').toLowerCase().includes(q)
+                        );
+                      })
+                      .map((s) => {
+                        const isChecked = (formData.subjectIds || []).includes(s.id);
+                        return (
+                          <label
+                            key={s.id}
+                            className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-surface text-xs font-medium cursor-pointer"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                const current = formData.subjectIds || [];
+                                const updated = e.target.checked
+                                  ? [...current, s.id]
+                                  : current.filter((id: string) => id !== s.id);
+                                setFormData({ ...formData, subjectIds: updated });
+                              }}
+                              className="rounded text-primary focus:ring-accent"
+                            />
+                            <span className="font-mono font-bold text-foreground">{s.abbreviation || s.code}</span>
+                            <span className="truncate text-muted-foreground">{s.name}</span>
+                          </label>
+                        );
+                      })}
+                    {subjects.filter((s) => {
+                      const q = subjectSearchQuery.toLowerCase();
+                      return !q || s.name.toLowerCase().includes(q) || (s.code || '').toLowerCase().includes(q) || (s.abbreviation || '').toLowerCase().includes(q);
+                    }).length === 0 && (
+                      <div className="py-3 text-center text-xs text-muted-foreground italic">
+                        No subjects match "{subjectSearchQuery}"
+                      </div>
+                    )}
                   </div>
                 </div>
               </>
@@ -1250,7 +1820,7 @@ export function DataManagementStudio() {
                   className="w-full bg-surface border border-border rounded-xl px-3.5 py-2 text-sm text-foreground focus:ring-2 focus:ring-accent"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-foreground uppercase mb-1">
                     Semester
@@ -1265,6 +1835,21 @@ export function DataManagementStudio() {
                     }
                     className="w-full bg-surface border border-border rounded-xl px-3.5 py-2 text-sm text-foreground focus:ring-2 focus:ring-accent"
                   />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-foreground uppercase mb-1">
+                    Credits (1 – 4) *
+                  </label>
+                  <select
+                    value={formData.credits ?? (formData.type === 'lab' ? 2 : 3)}
+                    onChange={(e) => setFormData({ ...formData, credits: parseInt(e.target.value, 10) })}
+                    className="w-full bg-surface border border-border rounded-xl px-3.5 py-2 text-sm font-semibold text-foreground focus:ring-2 focus:ring-accent"
+                  >
+                    <option value={1}>1 Credit (Minor / Tutorial)</option>
+                    <option value={2}>2 Credits (Practical / Lab)</option>
+                    <option value={3}>3 Credits (Standard Theory)</option>
+                    <option value={4}>4 Credits (Core Course / Major)</option>
+                  </select>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-foreground uppercase mb-1">
