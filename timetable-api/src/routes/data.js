@@ -21,6 +21,7 @@ function toClass(r)      {
   return { id: r.id, name: r.name, department: r.department, semester: r.semester, section: r.section, studentCount: r.student_count, classTeacherId: r.class_teacher_id || undefined, batches };
 }
 function toLab(r)        { return { id: r.id, name: r.name, capacity: r.capacity, department: r.department, location: r.location }; }
+function toRoom(r)       { return { id: r.id, name: r.name, capacity: r.capacity, building: r.building, type: r.type }; }
 function toSubject(r)    { return { id: r.id, name: r.name, code: r.code, abbreviation: r.abbreviation || undefined, type: r.type, credits: r.credits !== null && r.credits !== undefined ? Number(r.credits) : 3, color: r.color, department: r.department, semester: r.semester }; }
 function toFaculty(r, subjectIds = []) {
   let roles = [];
@@ -77,6 +78,7 @@ router.post('/import', async (req, res, next) => {
     await client.query('TRUNCATE assignments, faculty_subjects, faculty, subjects, rooms, labs, classes CASCADE');
 
     // Insert faculty first (so classes can reference faculty.id via class_teacher_id)
+    // NOTE: faculty_subjects are inserted AFTER subjects to avoid FK violation on subject_id
     for (const f of faculty) {
       const validRoles = Array.isArray(f.roles) ? f.roles : [];
       await client.query(
@@ -84,12 +86,6 @@ router.post('/import', async (req, res, next) => {
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (id) DO NOTHING`,
         [f.id, f.name, f.nickname ?? null, f.department, f.designation, JSON.stringify(validRoles), f.email, f.maxWeeklyHours ?? 20]
       );
-      for (const subjId of (f.subjectIds || [])) {
-        await client.query(
-          'INSERT INTO faculty_subjects (faculty_id, subject_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',
-          [f.id, subjId]
-        );
-      }
     }
 
     // Insert classes
@@ -125,6 +121,17 @@ router.post('/import', async (req, res, next) => {
         [s.id, s.name, s.code, s.abbreviation ?? null, s.type, parsedCredits, s.color, s.department, s.semester]
       );
     }
+
+    // Insert faculty_subjects AFTER subjects are inserted (subjects(id) FK must exist)
+    for (const f of faculty) {
+      for (const subjId of (f.subjectIds || [])) {
+        await client.query(
+          'INSERT INTO faculty_subjects (faculty_id, subject_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',
+          [f.id, subjId]
+        );
+      }
+    }
+
     // Insert assignments
     for (const a of assignments) {
       await client.query(
