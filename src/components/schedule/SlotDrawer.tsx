@@ -16,6 +16,7 @@ import { TIME_SLOTS } from '@/lib/constants';
 import { toast } from '@/lib/toast';
 import { Drawer } from '@/components/ui/Drawer';
 import { Button } from '@/components/ui/Button';
+import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import {
   Select,
   SelectContent,
@@ -31,6 +32,7 @@ import {
   getClassAvailabilityForSlot,
   calculateFacultyAllocatedHours,
 } from '@/lib/conflict-checker';
+import { getFacultyInitials } from '@/lib/utils';
 import { LabBatch } from '@/types/timetable';
 
 type BatchKey = 'A1' | 'A2' | 'A3' | 'A4';
@@ -139,13 +141,16 @@ export function SlotDrawer() {
         );
         const finalLectureSubjects = lectureSubjects.length > 0 ? lectureSubjects : subjectList;
 
-        const effectiveFacultyId = existing.facultyId || facultyList[0]?.id || '';
-        const matchingFac = facultyList.find((f) => f.id === effectiveFacultyId);
         const effectiveSubjectId =
           existing.subjectId ||
-          finalLectureSubjects.find((s) => matchingFac?.subjectIds?.includes(s.id))?.id ||
           finalLectureSubjects[0]?.id ||
           subjectList[0]?.id ||
+          '';
+        const mappedFaculties = facultyList.filter((f) => f.subjectIds?.includes(effectiveSubjectId));
+        const effectiveFacultyId =
+          existing.facultyId ||
+          mappedFaculties[0]?.id ||
+          facultyList[0]?.id ||
           '';
 
         const freeRoom = rooms.find((r) => {
@@ -243,13 +248,15 @@ export function SlotDrawer() {
     });
     setClassId(freeClass?.id || classes[0]?.id || '');
 
-    // 4. Smart Lecture Faculty & Subject Pre-population
+    // 4. Smart Lecture Subject & Faculty Pre-population (Subject First)
     const lectureSubjects = subjectList.filter(
       (s) => s.type === 'lecture' && (targetSemester ? s.semester === targetSemester : true)
     );
     const applicableLectureSubjects =
       lectureSubjects.length > 0 ? lectureSubjects : subjectList.filter((s) => s.type === 'lecture');
     const finalLectureSubjects = applicableLectureSubjects.length > 0 ? applicableLectureSubjects : subjectList;
+
+    const matchingSubj = finalLectureSubjects[0] || subjectList[0];
 
     const availableFaculties1hr = facultyList.filter((f) => {
       const allocated = calculateFacultyAllocatedHours(f.id, assignments, assignmentId);
@@ -263,21 +270,20 @@ export function SlotDrawer() {
       );
     });
 
+    const subjectFaculties = availableFaculties1hr.filter((f) =>
+      f.subjectIds?.includes(matchingSubj?.id)
+    );
+    const fallbackSubjectFaculties = facultyList.filter((f) =>
+      f.subjectIds?.includes(matchingSubj?.id)
+    );
     const matchingFac =
-      availableFaculties1hr.find((f) =>
-        f.subjectIds.some((sid) => finalLectureSubjects.some((s) => s.id === sid))
-      ) ||
+      subjectFaculties[0] ||
+      fallbackSubjectFaculties[0] ||
       availableFaculties1hr[0] ||
       facultyList[0];
 
-    const matchingSubj =
-      finalLectureSubjects.find((s) => matchingFac?.subjectIds?.includes(s.id)) ||
-      subjectList.find((s) => matchingFac?.subjectIds?.includes(s.id)) ||
-      finalLectureSubjects[0] ||
-      subjectList[0];
-
-    setFacultyId(matchingFac?.id || facultyList[0]?.id || '');
-    setSubjectId(matchingSubj?.id || subjectList[0]?.id || '');
+    setSubjectId(matchingSubj?.id || '');
+    setFacultyId(matchingFac?.id || '');
 
     // 5. Smart 4-Batch Lab Pre-population
     const labSubjects = subjectList.filter(
@@ -401,13 +407,32 @@ export function SlotDrawer() {
     );
   }, [isOpen, day, startSlot, duration, assignments, classes, assignmentId, subjectList, labs, rooms]);
 
-  // Filter subjects based on chosen faculty for 1-hr mode
+  // Available subjects for 1-hr lecture mode (prioritizing class semester)
   const availableSubjects = useMemo(() => {
-    if (!facultyId) return subjectList;
-    const selectedFac = facultyList.find((f) => f.id === facultyId);
-    if (!selectedFac || !selectedFac.subjectIds.length) return subjectList;
-    return subjectList.filter((s) => selectedFac.subjectIds.includes(s.id));
-  }, [facultyId, facultyList, subjectList]);
+    const targetClass = selectedTargetType === 'class' ? classes.find((c) => c.id === selectedTargetId) : undefined;
+    const targetSemester = targetClass?.semester;
+
+    const filteredByType = subjectList.filter((s) => (duration === 2 ? s.type === 'lab' : s.type === 'lecture'));
+    const listToUse = filteredByType.length > 0 ? filteredByType : subjectList;
+
+    if (targetSemester) {
+      return [...listToUse].sort((a, b) => {
+        if (a.semester === targetSemester && b.semester !== targetSemester) return -1;
+        if (b.semester === targetSemester && a.semester !== targetSemester) return 1;
+        return a.name.localeCompare(b.name);
+      });
+    }
+
+    return listToUse;
+  }, [subjectList, duration, selectedTargetType, selectedTargetId, classes]);
+
+  // Faculties pre-filtered to those assigned/mapped to teach the selected subject
+  const availableFaculties = useMemo(() => {
+    if (!subjectId) return facultyAvailability;
+    const mapped = facultyAvailability.filter((f) => f.faculty.subjectIds?.includes(subjectId));
+    // Fallback to all faculties if none are officially mapped in the database
+    return mapped.length > 0 ? mapped : facultyAvailability;
+  }, [subjectId, facultyAvailability]);
 
   // Helper to get available subjects for a specific batch's chosen faculty
   const getBatchSubjects = (batchFacultyId: string) => {
@@ -427,9 +452,18 @@ export function SlotDrawer() {
     }));
   };
 
-  // Auto-switch duration and auto-fill room when subject changes (for 1-hr single mode)
+  // Auto-switch duration, auto-assign mapped faculty, and auto-fill room when subject changes
   const handleSubjectChange = (newSubjectId: string) => {
     setSubjectId(newSubjectId);
+
+    // Auto-assign faculty mapped to this subject if current faculty is invalid
+    const mappedFacs = facultyAvailability.filter((fa) => fa.faculty.subjectIds?.includes(newSubjectId));
+    const currentFacValid = mappedFacs.some((fa) => fa.faculty.id === facultyId);
+    if (!currentFacValid && mappedFacs.length > 0) {
+      const availableFac = mappedFacs.find((fa) => fa.isAvailable) || mappedFacs[0];
+      setFacultyId(availableFac.faculty.id);
+    }
+
     const subj = subjectList.find((s) => s.id === newSubjectId);
     if (subj?.type === 'lab') {
       setDuration(2);
@@ -445,6 +479,72 @@ export function SlotDrawer() {
       }
     }
   };
+
+  // Memoized options for SearchableSelect
+  const facultyOptions = useMemo(() => {
+    return availableFaculties.map(({ faculty, isAvailable, allocatedHours, maxHours, conflictReason, conflictDetail }) => ({
+      value: faculty.id,
+      label: faculty.name,
+      code: faculty.nickname || getFacultyInitials(faculty),
+      subLabel: faculty.designation,
+      isAvailable,
+      disabled: !isAvailable,
+      disabledReason: conflictReason,
+      disabledDetail: conflictDetail,
+      badge: `${allocatedHours}/${maxHours}h`,
+    }));
+  }, [availableFaculties]);
+
+  const subjectOptions = useMemo(() => {
+    return availableSubjects.map((s) => ({
+      value: s.id,
+      label: s.name,
+      code: s.code,
+      badge: `${s.credits ?? 3}Cr`,
+      subLabel: `${s.type.toUpperCase()}${s.department ? ` • ${s.department}` : ''}${s.semester ? ` • Sem ${s.semester}` : ''}`,
+    }));
+  }, [availableSubjects]);
+
+  const roomOptions = useMemo(() => {
+    return roomAvailability.map(({ room, isAvailable, conflictReason, conflictDetail }) => ({
+      value: room.id,
+      label: room.name,
+      code: room.building || 'Room',
+      subLabel: `${room.capacity} seats capacity`,
+      isAvailable,
+      disabled: !isAvailable,
+      disabledReason: conflictReason,
+      disabledDetail: conflictDetail,
+      badge: `${room.capacity} Seats`,
+    }));
+  }, [roomAvailability]);
+
+  const classOptions = useMemo(() => {
+    return classAvailability.map(({ collegeClass: c, isAvailable, conflictReason, conflictDetail }) => ({
+      value: c.id,
+      label: c.name,
+      code: `Sec ${c.section}`,
+      subLabel: `${c.department} • Sem ${c.semester}`,
+      isAvailable,
+      disabled: !isAvailable,
+      disabledReason: conflictReason,
+      disabledDetail: conflictDetail,
+      badge: `Sem ${c.semester}`,
+    }));
+  }, [classAvailability]);
+
+  const labOptions = useMemo(() => {
+    return labAvailability.map(({ lab, isAvailable, conflictReason }) => ({
+      value: lab.id,
+      label: lab.name,
+      code: lab.location || 'Lab',
+      subLabel: `${lab.capacity} workstations`,
+      isAvailable,
+      disabled: !isAvailable,
+      disabledReason: conflictReason,
+      badge: `${lab.capacity} Workstations`,
+    }));
+  }, [labAvailability]);
 
   // Run Conflict Check for 1-hr lecture mode
   const conflictResult = useMemo(() => {
@@ -758,23 +858,23 @@ export function SlotDrawer() {
       <form key={`${assignmentId || 'new'}-${day}-${startSlot}`} onSubmit={handleSubmit} className="space-y-6">
         {/* Slot Duration & Type Single Line Nav */}
         <div>
-          <label className="block text-xs font-bold text-foreground uppercase tracking-wider mb-2">
+          <label className="block text-sm font-bold text-foreground mb-2">
             Session Duration & Type
           </label>
-          <div className="bg-surface-subtle border border-border p-1 rounded-xl flex items-center gap-1 w-full">
+          <div className="bg-surface-subtle border border-border p-1 rounded-xl flex items-center gap-1.5 w-full">
             <button
               type="button"
               onClick={() => {
                 setSessionType('lecture');
                 setDuration(1);
               }}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-1.5 rounded-lg text-xs font-bold transition-all truncate select-none ${
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-2 rounded-lg text-sm font-bold transition-all truncate select-none ${
                 sessionType === 'lecture'
                   ? 'bg-surface text-primary shadow-xs border border-primary/20 font-black'
-                  : 'text-muted hover:text-foreground hover:bg-surface/50'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-surface/50'
               }`}
             >
-              <Clock className="w-3.5 h-3.5 shrink-0" />
+              <Clock className="w-4 h-4 shrink-0" />
               <span className="truncate">1 Hr (Lecture)</span>
             </button>
             <button
@@ -783,13 +883,13 @@ export function SlotDrawer() {
                 setSessionType('lab');
                 setDuration(2);
               }}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-1.5 rounded-lg text-xs font-bold transition-all truncate select-none ${
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-2 rounded-lg text-sm font-bold transition-all truncate select-none ${
                 sessionType === 'lab'
                   ? 'bg-surface text-highlight shadow-xs border border-highlight/20 font-black'
-                  : 'text-muted hover:text-foreground hover:bg-surface/50'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-surface/50'
               }`}
             >
-              <FlaskConical className="w-3.5 h-3.5 shrink-0" />
+              <FlaskConical className="w-4 h-4 shrink-0" />
               <span className="truncate">2 Hr (4B Lab)</span>
             </button>
             <button
@@ -798,13 +898,13 @@ export function SlotDrawer() {
                 setSessionType('recess');
                 setDuration(1);
               }}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-1.5 rounded-lg text-xs font-bold transition-all truncate select-none ${
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-2 rounded-lg text-sm font-bold transition-all truncate select-none ${
                 sessionType === 'recess'
                   ? 'bg-emerald-100/90 text-emerald-900 border border-emerald-400 shadow-xs font-black'
-                  : 'text-muted hover:text-foreground hover:bg-surface/50'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-surface/50'
               }`}
             >
-              <Coffee className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
+              <Coffee className="w-4 h-4 shrink-0 text-emerald-600" />
               <span className="truncate">Recess</span>
             </button>
           </div>
@@ -865,35 +965,14 @@ export function SlotDrawer() {
                     Attending Class / Student Group *
                   </label>
                 </div>
-                <Select value={classId} onValueChange={(val) => setClassId(val)}>
-                  <SelectTrigger className="w-full text-xs">
-                    <SelectValue placeholder="Select Attending Class">
-                      {classes.find((c) => c.id === classId)?.name}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {classAvailability.map(({ collegeClass: c, isAvailable, conflictReason, conflictDetail }) => (
-                      <SelectItem key={c.id} value={c.id} disabled={!isAvailable}>
-                        <div className="flex flex-col gap-0.5 py-0.5 max-w-full">
-                          <div className="flex items-center gap-1.5">
-                            <span className={isAvailable ? 'text-emerald-600 font-bold' : 'text-rose-500 font-bold'} aria-hidden>
-                              {isAvailable ? '✓' : '✕'}
-                            </span>
-                            <span className="font-semibold">{c.name}</span>
-                            <span className="text-muted-foreground text-xs ml-auto shrink-0">
-                              Sem {c.semester} · Sec {c.section}
-                            </span>
-                          </div>
-                          {!isAvailable && (
-                            <div className="text-[11px] text-rose-600 font-medium pl-4 leading-tight">
-                              Not available — {conflictReason}{conflictDetail ? ` (${conflictDetail})` : ''}
-                            </div>
-                          )}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  value={classId}
+                  onValueChange={(val) => setClassId(val)}
+                  options={classOptions}
+                  placeholder="Select Attending Class"
+                  searchPlaceholder="Search class by name, section, or semester…"
+                  emptyMessage="No classes found matching search."
+                />
               </div>
             )}
 
@@ -927,13 +1006,13 @@ export function SlotDrawer() {
 
                   {/* Faculty Selection */}
                   <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="block text-[11px] font-bold text-foreground uppercase tracking-wider">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-bold text-foreground">
                         Faculty Member *
                       </label>
-                      <span className="text-[10px] text-muted-foreground">Pre-filtered for availability</span>
+                      <span className="text-xs text-muted-foreground font-medium">Pre-filtered for availability</span>
                     </div>
-                    <Select
+                    <SearchableSelect
                       value={bData.facultyId}
                       onValueChange={(val) => {
                         updateBatchField(batchKey, 'facultyId', val);
@@ -942,115 +1021,57 @@ export function SlotDrawer() {
                           updateBatchField(batchKey, 'subjectId', newFac.subjectIds[0] || bData.subjectId);
                         }
                       }}
-                    >
-                      <SelectTrigger className="w-full text-xs bg-white">
-                        <SelectValue placeholder="Select Faculty Member">
-                          {facultyList.find((f) => f.id === bData.facultyId)?.name}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {facultyAvailability.map(({ faculty, isAvailable, allocatedHours, maxHours, conflictReason, conflictDetail }) => (
-                          <SelectItem key={faculty.id} value={faculty.id} disabled={!isAvailable}>
-                            <div className="flex flex-col gap-0.5 py-0.5 max-w-full">
-                              <div className="flex items-center gap-1.5">
-                                <span className={isAvailable ? 'text-emerald-600 font-bold' : 'text-rose-500 font-bold'} aria-hidden>
-                                  {isAvailable ? '✓' : '✕'}
-                                </span>
-                                <span className="font-semibold">{faculty.name}</span>
-                                <span className="text-muted-foreground text-[11px] ml-auto shrink-0 font-mono">
-                                  {allocatedHours}/{maxHours}h
-                                </span>
-                              </div>
-                              {!isAvailable && (
-                                <div className="text-[11px] text-rose-600 font-medium pl-4 leading-tight">
-                                  Unavailable — {conflictReason}{conflictDetail ? ` (${conflictDetail})` : ''}
-                                </div>
-                              )}
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      options={facultyOptions}
+                      placeholder="Select Faculty Member"
+                      searchPlaceholder="Search faculty by name, initials…"
+                      emptyMessage="No faculty found."
+                    />
                   </div>
 
                   {/* Subject Selection */}
                   <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="block text-[11px] font-bold text-foreground uppercase tracking-wider">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-bold text-foreground">
                         Subject *
                       </label>
                       {bData.facultyId && (
-                        <span className="text-[10px] text-primary font-medium">
+                        <span className="text-xs text-primary font-semibold">
                           {bSubjects.length} mapped
                         </span>
                       )}
                     </div>
-                    <Select
+                    <SearchableSelect
                       value={bData.subjectId}
                       onValueChange={(val) => updateBatchField(batchKey, 'subjectId', val)}
-                    >
-                      <SelectTrigger className="w-full text-xs bg-white">
-                        <SelectValue placeholder="Select Subject">
-                          {(() => {
-                            const s = subjectList.find((sub) => sub.id === bData.subjectId);
-                            return s ? `${s.code} · ${s.name}` : undefined;
-                          })()}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {bSubjects.map((s) => (
-                          <SelectItem key={s.id} value={s.id}>
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono font-bold text-[11px] bg-primary/10 text-primary px-1.5 py-0.5 rounded">
-                                {s.code}
-                              </span>
-                              <span className="font-medium">{s.name}</span>
-                              <span className="text-muted-foreground text-[10px] ml-auto flex items-center gap-1.5">
-                                <span className="font-mono font-semibold bg-amber-50 text-amber-800 border border-amber-200 px-1 rounded">{s.credits ?? 2}Cr</span>
-                                <span>{s.type.toUpperCase()}</span>
-                              </span>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      options={bSubjects.map((s) => ({
+                        value: s.id,
+                        label: s.name,
+                        code: s.code,
+                        badge: `${s.credits ?? 2}Cr`,
+                        subLabel: `${s.type.toUpperCase()}${s.semester ? ` • Sem ${s.semester}` : ''}`,
+                      }))}
+                      placeholder="Select Subject"
+                      searchPlaceholder="Search batch subject by name or code…"
+                      emptyMessage="No subjects mapped."
+                    />
                   </div>
 
                   {/* Lab Facility */}
                   <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="block text-[11px] font-bold text-foreground uppercase tracking-wider">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-bold text-foreground">
                         Lab Facility *
                       </label>
-                      <span className="text-[10px] text-muted-foreground">Real-time lab status</span>
+                      <span className="text-xs text-muted-foreground font-medium">Real-time lab status</span>
                     </div>
-                    <Select
+                    <SearchableSelect
                       value={bData.labId}
                       onValueChange={(val) => updateBatchField(batchKey, 'labId', val)}
-                    >
-                      <SelectTrigger className="w-full text-xs bg-white">
-                        <SelectValue placeholder="Select Lab Facility">
-                          {labs.find((l) => l.id === bData.labId)?.name}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {labAvailability.map(({ lab, isAvailable, conflictReason }) => (
-                          <SelectItem key={lab.id} value={lab.id} disabled={!isAvailable}>
-                            <div className="flex items-center gap-1.5">
-                              <span className={isAvailable ? 'text-emerald-600 font-bold' : 'text-rose-500 font-bold'}>
-                                {isAvailable ? '✓' : '✕'}
-                              </span>
-                              <span className="font-semibold text-xs">{lab.name}</span>
-                              {!isAvailable && (
-                                <span className="text-[10px] text-rose-500 ml-auto truncate max-w-[120px]">
-                                  ({conflictReason})
-                                </span>
-                              )}
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      options={labOptions}
+                      placeholder="Select Lab Facility"
+                      searchPlaceholder="Search lab by name or location…"
+                      emptyMessage="No labs found."
+                    />
                   </div>
                 </div>
               );
@@ -1076,135 +1097,65 @@ export function SlotDrawer() {
           /* 1-HOUR LECTURE STANDARD FORM                                 */
           /* ============================================================ */
           <div className="space-y-4">
-            {/* Faculty Select */}
+            {/* 1. Subject Select (Subject First) */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-bold text-foreground uppercase tracking-wider">
-                  Faculty Member *
-                </label>
-                <span className="text-xs text-muted-foreground">Pre-filtered for availability</span>
-              </div>
-
-              <Select
-                value={facultyId}
-                onValueChange={(val) => {
-                  setFacultyId(val);
-                  const newFac = facultyList.find((f) => f.id === val);
-                  if (newFac && (!subjectId || !newFac.subjectIds.includes(subjectId))) {
-                    setSubjectId(newFac.subjectIds[0] || availableSubjects[0]?.id || subjectId || '');
-                  }
-                }}
-              >
-                <SelectTrigger className="w-full text-xs">
-                  <SelectValue placeholder="Select Faculty Member">
-                    {facultyList.find((f) => f.id === facultyId)?.name}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {facultyAvailability.map(({ faculty, isAvailable, allocatedHours, maxHours, conflictReason, conflictDetail }) => (
-                    <SelectItem key={faculty.id} value={faculty.id} disabled={!isAvailable}>
-                      <div className="flex flex-col gap-0.5 py-0.5 max-w-full">
-                        <div className="flex items-center gap-1.5">
-                          <span className={isAvailable ? 'text-emerald-600 font-bold' : 'text-rose-500 font-bold'} aria-hidden>
-                            {isAvailable ? '✓' : '✕'}
-                          </span>
-                          <span className="font-semibold">{faculty.name}</span>
-                          <span className="text-muted-foreground text-[11px] ml-auto shrink-0 font-mono">
-                            {allocatedHours}/{maxHours}h
-                          </span>
-                        </div>
-                        {!isAvailable && (
-                          <div className="text-[11px] text-rose-600 font-medium pl-4 leading-tight">
-                            Not available — {conflictReason}{conflictDetail ? ` (${conflictDetail})` : ''}
-                          </div>
-                        )}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Subject Select */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-bold text-foreground uppercase tracking-wider">
+                <label className="block text-sm font-bold text-foreground">
                   Subject *
                 </label>
-                {facultyId && (
-                  <span className="text-xs text-primary font-medium">
-                    {availableSubjects.length} subjects taught
+                <span className="text-xs text-muted-foreground font-medium">Select subject first</span>
+              </div>
+
+              <SearchableSelect
+                value={subjectId}
+                onValueChange={(val) => handleSubjectChange(val)}
+                options={subjectOptions}
+                placeholder="Select Subject"
+                searchPlaceholder="Search subject by code, name, or semester…"
+                emptyMessage="No subjects found matching search."
+              />
+            </div>
+
+            {/* 2. Faculty Select (Filtered by Subject) */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-sm font-bold text-foreground">
+                  Faculty Member *
+                </label>
+                {subjectId && (
+                  <span className="text-xs text-primary font-bold">
+                    {availableFaculties.length} faculty assigned to this subject
                   </span>
                 )}
               </div>
 
-              <Select
-                value={subjectId}
-                onValueChange={(val) => handleSubjectChange(val)}
-              >
-                <SelectTrigger className="w-full text-xs">
-                  <SelectValue placeholder="Select Subject">
-                    {(() => {
-                      const s = subjectList.find((sub) => sub.id === subjectId);
-                      return s ? `${s.code} · ${s.name}` : undefined;
-                    })()}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {availableSubjects.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">{s.code}</span>
-                        <span className="font-medium">{s.name}</span>
-                        <span className="text-muted-foreground text-[11px] ml-auto flex items-center gap-1.5">
-                          <span className="font-mono font-semibold bg-amber-50 text-amber-800 border border-amber-200 px-1 rounded">{s.credits ?? 3}Cr</span>
-                          <span>{s.type.toUpperCase()}</span>
-                        </span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={facultyId}
+                onValueChange={(val) => setFacultyId(val)}
+                options={facultyOptions}
+                placeholder="Select Faculty Member"
+                searchPlaceholder="Search assigned faculty by name, initials, or designation…"
+                emptyMessage="No faculty found assigned to this subject."
+              />
             </div>
 
             {/* Location Assignment */}
             {selectedTargetType === 'class' && (
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-bold text-foreground uppercase tracking-wider">
+                  <label className="block text-sm font-bold text-foreground">
                     Lecture Room
                   </label>
-                  <span className="text-xs text-muted-foreground">Real-time occupancy check</span>
+                  <span className="text-xs text-muted-foreground font-medium">Real-time occupancy check</span>
                 </div>
-                <Select value={roomId} onValueChange={(val) => setRoomId(val)}>
-                  <SelectTrigger className="w-full text-xs">
-                    <SelectValue placeholder="Auto-selected or choose room">
-                      {rooms.find((r) => r.id === roomId)?.name}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {roomAvailability.map(({ room, isAvailable, conflictReason, conflictDetail }) => (
-                      <SelectItem key={room.id} value={room.id} disabled={!isAvailable}>
-                        <div className="flex flex-col gap-0.5 py-0.5 max-w-full">
-                          <div className="flex items-center gap-1.5">
-                            <span className={isAvailable ? 'text-emerald-600 font-bold' : 'text-rose-500 font-bold'} aria-hidden>
-                              {isAvailable ? '✓' : '✕'}
-                            </span>
-                            <span className="font-semibold font-mono">{room.name}</span>
-                            <span className="text-muted-foreground text-xs ml-auto shrink-0 font-mono">
-                              {room.capacity} seats
-                            </span>
-                          </div>
-                          {!isAvailable && (
-                            <div className="text-[11px] text-rose-600 font-medium pl-4 leading-tight">
-                              Not available — {conflictReason}{conflictDetail ? ` (${conflictDetail})` : ''}
-                            </div>
-                          )}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  value={roomId}
+                  onValueChange={(val) => setRoomId(val)}
+                  options={roomOptions}
+                  placeholder="Auto-selected or choose room"
+                  searchPlaceholder="Search room by name or building…"
+                  emptyMessage="No rooms found."
+                />
               </div>
             )}
 
@@ -1212,45 +1163,26 @@ export function SlotDrawer() {
             {selectedTargetType !== 'class' && (
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-bold text-foreground uppercase tracking-wider">
+                  <label className="block text-sm font-bold text-foreground">
                     Attending Student Group / Class *
                   </label>
-                  <span className="text-xs text-muted-foreground">Class schedule check</span>
+                  <span className="text-xs text-muted-foreground font-medium">Class schedule check</span>
                 </div>
-                <Select value={classId} onValueChange={(val) => setClassId(val)}>
-                  <SelectTrigger className="w-full text-xs">
-                    <SelectValue placeholder="Select Attending Class" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {classAvailability.map(({ collegeClass: c, isAvailable, conflictReason, conflictDetail }) => (
-                      <SelectItem key={c.id} value={c.id} disabled={!isAvailable}>
-                        <div className="flex flex-col gap-0.5 py-0.5 max-w-full">
-                          <div className="flex items-center gap-1.5">
-                            <span className={isAvailable ? 'text-emerald-600 font-bold' : 'text-rose-500 font-bold'} aria-hidden>
-                              {isAvailable ? '✓' : '✕'}
-                            </span>
-                            <span className="font-semibold">{c.name}</span>
-                            <span className="text-muted-foreground text-xs ml-auto shrink-0">
-                              Sem {c.semester} · Sec {c.section}
-                            </span>
-                          </div>
-                          {!isAvailable && (
-                            <div className="text-[11px] text-rose-600 font-medium pl-4 leading-tight">
-                              Not available — {conflictReason}{conflictDetail ? ` (${conflictDetail})` : ''}
-                            </div>
-                          )}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  value={classId}
+                  onValueChange={(val) => setClassId(val)}
+                  options={classOptions}
+                  placeholder="Select Attending Class"
+                  searchPlaceholder="Search class by name, semester, or section…"
+                  emptyMessage="No classes found."
+                />
               </div>
             )}
 
             {/* Conflict & Warning Banners for 1-hr */}
             {conflictResult.errors.length > 0 && (
               <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl space-y-1">
-                <div className="flex items-center gap-2 text-rose-700 font-bold text-xs">
+                <div className="flex items-center gap-2 text-rose-700 font-bold text-sm">
                   <AlertCircle className="w-4 h-4 shrink-0" />
                   <span>Scheduling Conflict Detected</span>
                 </div>
@@ -1264,14 +1196,14 @@ export function SlotDrawer() {
 
             {/* API Save Error */}
             {saveError && (
-              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-2 text-rose-700 text-xs font-medium">
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-2 text-rose-700 text-sm font-medium">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{saveError}</span>
               </div>
             )}
 
             {facultyId && subjectId && conflictResult.canBook && (
-              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2 text-emerald-800 text-xs font-medium">
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2 text-emerald-800 text-sm font-medium">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                 <span>
                   Conflict-free slot confirmed! Faculty hours:{' '}

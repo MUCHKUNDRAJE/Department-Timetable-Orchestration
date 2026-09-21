@@ -67,7 +67,7 @@ router.get('/', async (req, res, next) => {
 router.post('/', classValidators, validate, async (req, res, next) => {
   try {
     const { name, department, semester, section, studentCount = 60, classTeacherId = null, batches } = req.body;
-    const id = req.body.id || `class_${uuidv4().replace(/-/g, '').slice(0, 12)}`;
+    const id = `class_${uuidv4().replace(/-/g, '').slice(0, 12)}`; // Always server-generated
     const finalBatches = Array.isArray(batches) && batches.length === 4
       ? batches
       : getDefaultBatches(section, studentCount);

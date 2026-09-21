@@ -35,8 +35,10 @@ router.post(
       .matches(/^[a-zA-Z0-9_-]+$/)
       .withMessage('Username may only contain letters, numbers, hyphens, and underscores.'),
     body('password')
-      .isLength({ min: 6 })
-      .withMessage('Password must be at least 6 characters long.'),
+      .isLength({ min: 8 })
+      .withMessage('Password must be at least 8 characters long.')
+      .matches(/^(?=.*[a-zA-Z])(?=.*[0-9])/) 
+      .withMessage('Password must contain at least one letter and one number.'),
     body('fullName')
       .optional()
       .trim(),
@@ -64,12 +66,17 @@ router.post(
       const salt = await bcrypt.genSalt(10);
       const passwordHash = await bcrypt.hash(password, salt);
 
+      // First registered user becomes admin; all subsequent users become viewers
+      const countRes = await db.query('SELECT COUNT(*) FROM users');
+      const isFirstUser = parseInt(countRes.rows[0].count, 10) === 0;
+      const assignedRole = isFirstUser ? 'admin' : 'viewer';
+
       // Insert new user
       const result = await db.query(
         `INSERT INTO users (username, password_hash, full_name, role)
-         VALUES ($1, $2, $3, 'admin')
+         VALUES ($1, $2, $3, $4)
          RETURNING id, username, full_name, role, created_at`,
-        [cleanUsername, passwordHash, fullName.trim() || cleanUsername]
+        [cleanUsername, passwordHash, fullName.trim() || cleanUsername, assignedRole]
       );
 
       const user = result.rows[0];

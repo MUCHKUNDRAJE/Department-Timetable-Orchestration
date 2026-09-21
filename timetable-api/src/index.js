@@ -6,7 +6,9 @@ const express    = require('express');
 const cors       = require('cors');
 const helmet     = require('helmet');
 const morgan     = require('morgan');
+const compression = require('compression');
 const rateLimit  = require('express-rate-limit');
+const { v4: uuidv4 } = require('uuid');
 const errorHandler = require('./middleware/errorHandler');
 
 // ─── Route modules ────────────────────────────────────────────────────
@@ -22,6 +24,15 @@ const { requireAuth }   = require('./middleware/auth');
 
 const app  = express();
 const PORT = process.env.PORT || 5000;
+
+// ─── Compression ─────────────────────────────────────────────────────
+app.use(compression());
+
+// ─── Request ID (for tracing) ─────────────────────────────────────────
+app.use((req, _res, next) => {
+  req.id = uuidv4();
+  next();
+});
 
 // ─── Global Security Middleware ───────────────────────────────────────
 app.use(helmet());

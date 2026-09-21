@@ -47,7 +47,7 @@ router.get('/', async (req, res, next) => {
 router.post('/', subjectValidators, validate, async (req, res, next) => {
   try {
     const { name, code, abbreviation, type, credits, color, department, semester } = req.body;
-    const id = req.body.id || `subj_${uuidv4().replace(/-/g, '').slice(0, 10)}`;
+    const id = `subj_${uuidv4().replace(/-/g, '').slice(0, 10)}`; // Always server-generated
     const parsedCredits = credits !== undefined && credits !== null ? Math.min(4, Math.max(1, parseInt(credits, 10) || 3)) : 3;
     const result = await db.query(
       `INSERT INTO subjects (id, name, code, abbreviation, type, credits, color, department, semester)

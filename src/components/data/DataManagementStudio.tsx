@@ -1687,35 +1687,91 @@ export function DataManagementStudio() {
                     <label className="block text-xs font-bold text-foreground uppercase">
                       Assigned Subjects Taught (Multi-select)
                     </label>
-                    {(formData.subjectIds || []).length > 0 && (
-                      <span className="text-[10.5px] font-mono text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-md px-1.5 py-0.5">
-                        {(formData.subjectIds || []).length} selected
-                      </span>
-                    )}
-                  </div>
-                  {/* Search bar */}
-                  <div className="relative mb-1.5">
-                    <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
-                      <Search className="w-3.5 h-3.5 text-muted-foreground" />
+                    <div className="flex items-center gap-1.5">
+                      {(formData.subjectIds || []).length > 0 && (
+                        <span className="text-[10.5px] font-mono font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-md px-1.5 py-0.5">
+                          {(formData.subjectIds || []).length} assigned
+                        </span>
+                      )}
                     </div>
-                    <input
-                      type="text"
-                      placeholder="Search subjects by name, code, or abbreviation…"
-                      value={subjectSearchQuery}
-                      onChange={(e) => setSubjectSearchQuery(e.target.value)}
-                      className="w-full bg-surface border border-border rounded-xl pl-8 pr-3.5 py-2 text-sm text-foreground focus:ring-2 focus:ring-accent"
-                    />
-                    {subjectSearchQuery && (
-                      <button
-                        type="button"
-                        onClick={() => setSubjectSearchQuery('')}
-                        className="absolute inset-y-0 right-3 flex items-center text-muted-foreground hover:text-foreground text-xs"
-                      >
-                        ✕
-                      </button>
-                    )}
                   </div>
-                  <div className="space-y-1.5 max-h-48 overflow-y-auto p-2 border border-border rounded-xl bg-surface-subtle">
+
+                  {/* Search bar & quick actions */}
+                  <div className="space-y-1.5 mb-1.5">
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                        <Search className="w-3.5 h-3.5 text-muted-foreground" />
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Search subjects by name, code, or abbreviation…"
+                        value={subjectSearchQuery}
+                        onChange={(e) => setSubjectSearchQuery(e.target.value)}
+                        className="w-full bg-surface border border-border rounded-xl pl-8 pr-8 py-2 text-xs text-foreground placeholder:text-muted focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                      />
+                      {subjectSearchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setSubjectSearchQuery('')}
+                          className="absolute inset-y-0 right-2.5 flex items-center text-muted-foreground hover:text-foreground text-xs"
+                          title="Clear search"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Quick filter action toolbar */}
+                    {(() => {
+                      const filteredList = subjects.filter((s) => {
+                        const q = subjectSearchQuery.toLowerCase();
+                        return (
+                          !q ||
+                          s.name.toLowerCase().includes(q) ||
+                          (s.code || '').toLowerCase().includes(q) ||
+                          (s.abbreviation || '').toLowerCase().includes(q)
+                        );
+                      });
+
+                      const allFilteredSelected =
+                        filteredList.length > 0 &&
+                        filteredList.every((s) => (formData.subjectIds || []).includes(s.id));
+
+                      return (
+                        <div className="flex items-center justify-between text-[11px] px-1 text-muted-foreground">
+                          <span>
+                            Showing <strong>{filteredList.length}</strong> of {subjects.length} subjects
+                          </span>
+                          {filteredList.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const current = formData.subjectIds || [];
+                                if (allFilteredSelected) {
+                                  const filteredIds = new Set(filteredList.map((s) => s.id));
+                                  setFormData({
+                                    ...formData,
+                                    subjectIds: current.filter((id: string) => !filteredIds.has(id)),
+                                  });
+                                } else {
+                                  const union = Array.from(
+                                    new Set([...current, ...filteredList.map((s) => s.id)])
+                                  );
+                                  setFormData({ ...formData, subjectIds: union });
+                                }
+                              }}
+                              className="text-primary hover:underline font-semibold"
+                            >
+                              {allFilteredSelected ? 'Deselect visible' : 'Select all visible'}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Filtered Subjects List */}
+                  <div className="space-y-1 max-h-52 overflow-y-auto p-1.5 border border-border rounded-xl bg-surface-subtle">
                     {subjects
                       .filter((s) => {
                         const q = subjectSearchQuery.toLowerCase();
@@ -1731,7 +1787,12 @@ export function DataManagementStudio() {
                         return (
                           <label
                             key={s.id}
-                            className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-surface text-xs font-medium cursor-pointer"
+                            className={cn(
+                              'flex items-center gap-2 p-2 rounded-lg text-xs font-medium cursor-pointer transition-colors',
+                              isChecked
+                                ? 'bg-primary/10 border border-primary/20 text-foreground shadow-xs'
+                                : 'hover:bg-surface text-foreground border border-transparent'
+                            )}
                           >
                             <input
                               type="checkbox"
@@ -1743,10 +1804,20 @@ export function DataManagementStudio() {
                                   : current.filter((id: string) => id !== s.id);
                                 setFormData({ ...formData, subjectIds: updated });
                               }}
-                              className="rounded text-primary focus:ring-accent"
+                              className="rounded text-primary focus:ring-accent shrink-0"
                             />
-                            <span className="font-mono font-bold text-foreground">{s.abbreviation || s.code}</span>
-                            <span className="truncate text-muted-foreground">{s.name}</span>
+                            <span className="font-mono font-bold text-[11px] bg-surface border border-border px-1.5 py-0.5 rounded shrink-0">
+                              {s.code || s.abbreviation}
+                            </span>
+                            <span className="truncate flex-1 font-medium">{s.name}</span>
+                            <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-amber-50 text-amber-800 border border-amber-200 shrink-0 font-semibold">
+                              {s.credits ?? 3}Cr
+                            </span>
+                            {s.semester && (
+                              <span className="text-[10px] text-muted-foreground font-mono shrink-0 hidden sm:inline">
+                                Sem {s.semester}
+                              </span>
+                            )}
                           </label>
                         );
                       })}
@@ -1754,7 +1825,7 @@ export function DataManagementStudio() {
                       const q = subjectSearchQuery.toLowerCase();
                       return !q || s.name.toLowerCase().includes(q) || (s.code || '').toLowerCase().includes(q) || (s.abbreviation || '').toLowerCase().includes(q);
                     }).length === 0 && (
-                      <div className="py-3 text-center text-xs text-muted-foreground italic">
+                      <div className="py-4 text-center text-xs text-muted-foreground italic">
                         No subjects match "{subjectSearchQuery}"
                       </div>
                     )}

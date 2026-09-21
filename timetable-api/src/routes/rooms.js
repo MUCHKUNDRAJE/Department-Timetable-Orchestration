@@ -39,7 +39,7 @@ router.get('/', async (req, res, next) => {
 router.post('/', roomValidators, validate, async (req, res, next) => {
   try {
     const { name, capacity, building, type = 'lecture' } = req.body;
-    const id = req.body.id || `room_${uuidv4().replace(/-/g, '').slice(0, 12)}`;
+    const id = `room_${uuidv4().replace(/-/g, '').slice(0, 12)}`; // Always server-generated
     const result = await db.query(
       `INSERT INTO rooms (id, name, capacity, building, type)
        VALUES ($1,$2,$3,$4,$5) RETURNING *`,

@@ -46,7 +46,7 @@ const assignmentValidators = [
   body('roomId').optional({ nullable: true }).trim(),
   body('labId').optional({ nullable: true }).trim(),
   body('classId').optional({ nullable: true }).trim(),
-  body('labBatches').optional().isArray(),
+  body('labBatches').optional().isArray({ max: 4 }).withMessage('labBatches cannot exceed 4 batches'),
 ];
 
 // ─── GET /api/assignments ────────────────────────────────────────────
@@ -66,7 +66,7 @@ router.post('/', assignmentValidators, validate, async (req, res, next) => {
       day, startSlot, duration, targetType, targetId,
       classId, facultyId, subjectId, roomId, labId, labBatches = [], isRecess = false,
     } = req.body;
-    const id = req.body.id || `asg_${uuidv4().replace(/-/g, '').slice(0, 12)}`;
+    const id = `asg_${uuidv4().replace(/-/g, '').slice(0, 12)}`; // Always server-generated
     const result = await db.query(
       `INSERT INTO assignments
          (id, day, start_slot, duration, target_type, target_id, class_id,

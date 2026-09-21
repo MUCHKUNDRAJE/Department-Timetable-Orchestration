@@ -69,7 +69,7 @@ router.post('/', facultyValidators, validate, async (req, res, next) => {
     await client.query('BEGIN');
 
     const { name, nickname, department, designation, roles = [], email, maxWeeklyHours = 20, subjectIds = [] } = req.body;
-    const id = req.body.id || `fac_${uuidv4().replace(/-/g, '').slice(0, 12)}`;
+    const id = `fac_${uuidv4().replace(/-/g, '').slice(0, 12)}`; // Always server-generated
     const validRoles = Array.isArray(roles) ? roles : [];
 
     // Designation validation: HOD (max 1) and Timetable Incharge (max 5)

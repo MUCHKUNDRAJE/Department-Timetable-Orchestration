@@ -3,23 +3,22 @@
 /**
  * Centralised error handler middleware.
  * Converts any unhandled error into a consistent JSON response.
+ * NEVER exposes raw error messages or stack traces to the client in production.
  */
 // eslint-disable-next-line no-unused-vars
 function errorHandler(err, req, res, next) {
   const status = err.status || err.statusCode || 500;
-  const message = err.message || 'Internal Server Error';
+  const isProd = process.env.NODE_ENV === 'production';
 
-  // Log full stack in development
-  if (process.env.NODE_ENV !== 'production') {
-    console.error('[ERROR]', err.stack || err);
-  }
+  // Always log the full error server-side
+  console.error(`[ERROR] ${req.method} ${req.path} →`, err.stack || err);
 
   // PostgreSQL unique-violation → 409 Conflict
   if (err.code === '23505') {
     return res.status(409).json({
       success: false,
       error: 'A record with this unique value already exists.',
-      details: [err.detail || err.message],
+      details: isProd ? [] : [err.detail || err.message],
     });
   }
 
@@ -28,7 +27,7 @@ function errorHandler(err, req, res, next) {
     return res.status(400).json({
       success: false,
       error: 'Referenced record does not exist.',
-      details: [err.detail || err.message],
+      details: isProd ? [] : [err.detail || err.message],
     });
   }
 
@@ -37,13 +36,14 @@ function errorHandler(err, req, res, next) {
     return res.status(400).json({
       success: false,
       error: 'Value violates a database constraint.',
-      details: [err.detail || err.message],
+      details: isProd ? [] : [err.detail || err.message],
     });
   }
 
+  // Generic error — never leak internal message in production
   return res.status(status).json({
     success: false,
-    error: message,
+    error: isProd && status >= 500 ? 'An internal server error occurred.' : (err.message || 'Internal Server Error'),
     details: [],
   });
 }
